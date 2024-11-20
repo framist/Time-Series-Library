@@ -92,6 +92,7 @@ bash ./scripts/imputation/ETT_script/TimesNet_ETTh1.sh
 bash ./scripts/anomaly_detection/PSM/TimesNet.sh
 # classification
 bash ./scripts/classification/TimesNet.sh
+bash ./scripts/classification/EEG_TimesNet.sh
 ```
 
 4. Develop your own model.

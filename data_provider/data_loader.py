@@ -307,6 +307,131 @@ class Dataset_Custom(Dataset):
         return self.scaler.inverse_transform(data)
 
 
+class Dataset_Custom_EEG(Dataset):
+    """脑电信号的自定义数据集
+    弃用，因：`Dataset_Custom` 模板非分类任务"""
+
+    def __init__(
+        self,
+        args,
+        root_path,  # 父文件夹，使用此需指定 `--root_path ./dataset/EEG/`
+        flag="train",
+        size=None,  # [seq_len, label_len, pred_len]
+        features="S",
+        data_path="data/", # 预定好的数据集文件夹
+        # target="OT",
+        scale=True, # 是否标准，（在此设定，非传参设定）
+        # timeenc=0,
+        # freq="h",
+        # seasonal_patterns=None,
+    ):
+        """e.g. 
+        ```
+        data_set = Data(
+            args = args,
+            root_path=args.root_path,
+            flag=flag,
+        )
+        ```"""
+        # size [seq_len, label_len, pred_len]
+        self.args = args
+        # info
+        if size == None:
+            self.seq_len = 24 * 4 * 4
+            self.label_len = 24 * 4
+            self.pred_len = 24 * 4
+        else:
+            self.seq_len = size[0]
+            self.label_len = size[1]
+            self.pred_len = size[2]
+        # init
+        assert flag in ["train", "test", "val"]
+        type_map = {"train": 0, "val": 1, "test": 2}
+        self.set_type = type_map[flag]
+
+        self.features = features
+        # self.target = target
+        self.scale = scale
+        # self.timeenc = timeenc
+        # self.freq = freq
+
+        self.root_path = root_path
+        self.data_path = data_path
+        self.__read_data__()
+        
+    def __read_data__(self):
+        """这里他本身不应该加双下划线的"""
+        self.scaler = StandardScaler()
+        df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
+
+        """
+        df_raw.columns: ['date', ...(other features), target feature]
+        """
+        cols = list(df_raw.columns)
+        cols.remove(self.target)
+        cols.remove("date")
+        df_raw = df_raw[["date"] + cols + [self.target]]
+        num_train = int(len(df_raw) * 0.7)
+        num_test = int(len(df_raw) * 0.2)
+        num_vali = len(df_raw) - num_train - num_test
+        border1s = [0, num_train - self.seq_len, len(df_raw) - num_test - self.seq_len]
+        border2s = [num_train, num_train + num_vali, len(df_raw)]
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+
+        if self.features == "M" or self.features == "MS":
+            cols_data = df_raw.columns[1:]
+            df_data = df_raw[cols_data]
+        elif self.features == "S":
+            df_data = df_raw[[self.target]]
+
+        if self.scale:
+            train_data = df_data[border1s[0] : border2s[0]]
+            self.scaler.fit(train_data.values)
+            data = self.scaler.transform(df_data.values)
+        else:
+            data = df_data.values
+
+        df_stamp = df_raw[["date"]][border1:border2]
+        df_stamp["date"] = pd.to_datetime(df_stamp.date)
+        if self.timeenc == 0:
+            df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp["weekday"] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp["hour"] = df_stamp.date.apply(lambda row: row.hour, 1)
+            data_stamp = df_stamp.drop(["date"], 1).values
+        elif self.timeenc == 1:
+            data_stamp = time_features(pd.to_datetime(df_stamp["date"].values), freq=self.freq)
+            data_stamp = data_stamp.transpose(1, 0)
+
+        self.data_x = data[border1:border2]
+        self.data_y = data[border1:border2]
+
+        if self.set_type == 0 and self.args.augmentation_ratio > 0:
+            self.data_x, self.data_y, augmentation_tags = run_augmentation_single(self.data_x, self.data_y, self.args)
+
+        self.data_stamp = data_stamp
+
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+
+        seq_x = self.data_x[s_begin:s_end]
+        seq_y = self.data_y[r_begin:r_end]
+        seq_x_mark = self.data_stamp[s_begin:s_end]
+        seq_y_mark = self.data_stamp[r_begin:r_end]
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
+
+    def __len__(self):
+        return len(self.data_x) - self.seq_len - self.pred_len + 1
+
+    def inverse_transform(self, data):
+        return self.scaler.inverse_transform(data)
+
+
 class Dataset_M4(Dataset):
     def __init__(self, args, root_path, flag='pred', size=None,
                  features='S', data_path='ETTh1.csv',
@@ -746,3 +871,382 @@ class UEAloader(Dataset):
 
     def __len__(self):
         return len(self.all_IDs)
+
+import scipy
+import scipy.signal
+from scipy import signal
+from scipy.stats import kurtosis, skew
+from torch.utils.data import random_split, ConcatDataset, Subset
+
+TIME_POINTS = TIME_POINTS_O = 1000
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import KFold
+
+
+class _MyEEGDataset(Dataset):
+    def __init__(
+        self, data: torch.FloatTensor, labels: torch.LongTensor, extract_feats: bool = False, extra_feats=None
+    ):
+        """初始化数据集
+
+        Args:
+            data (torch.FloatTensor): _description_
+            labels (torch.LongTensor): _description_
+            extract_feats (bool, optional): 是否手动提取特征 (N*9) 。Defaults to False.
+            extra_feats (_type_, optional): 外部输入的额外特征。Defaults to None.
+        """
+        self.data = data
+        self.labels = labels
+        self.extract_feats = extract_feats
+        self.extra_feats = extra_feats
+        if self.extra_feats is not None:
+            self.extra_feats = torch.tensor(self.extra_feats, dtype=torch.float32)
+            # self.extra_feats = torch.zeros_like(self.extra_feats, dtype=torch.float32)
+            assert len(self.extra_feats) == len(self.data), f"{len(self.extra_feats)} != {len(self.data)}"
+
+        if self.extract_feats:
+            x = self.data.numpy()
+            mmean = np.mean(x, axis=2)
+            sstd = np.std(x, axis=2, ddof=1)
+            kkur = kurtosis(x, axis=2, fisher=False)
+            sskew = skew(x, axis=2)
+
+            # 计算相对功率特征
+            fre, psd = signal.welch(x, fs=250, window="hann", axis=2)
+            power_all = np.sum(psd[:, :, (fre > 0.5) & (fre <= 45)], axis=2) + 0.000001
+            power_delta = np.sum(psd[:, :, (fre > 0.5) & (fre <= 4)], axis=2) / power_all
+            power_theta = np.sum(psd[:, :, (fre > 4) & (fre <= 8)], axis=2) / power_all
+            power_alpha = np.sum(psd[:, :, (fre > 8) & (fre <= 13)], axis=2) / power_all
+            power_beta = np.sum(psd[:, :, (fre > 13) & (fre <= 30)], axis=2) / power_all
+            power_gamma = np.sum(psd[:, :, (fre > 30) & (fre <= 45)], axis=2) / power_all
+
+            # 特征拼接
+            features = np.concatenate(
+                (
+                    mmean,
+                    sstd,
+                    kkur,
+                    sskew,
+                    power_delta,
+                    power_theta,
+                    power_alpha,
+                    power_beta,
+                    power_gamma,
+                ),
+                axis=1,
+            )
+
+            # 将异常值替换为 0
+            features = np.nan_to_num(features)
+
+            # 特征归一化
+            scaler = MinMaxScaler()
+            features = scaler.fit_transform(features.reshape(-1, features.shape[-1])).reshape(features.shape)
+            if extra_feats is None:
+                self.data = torch.tensor(features, dtype=torch.float32)
+            else:
+                self.extra_feats = torch.cat((self.extra_feats, torch.tensor(features, dtype=torch.float32)), dim=1)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        if self.extra_feats is not None:
+            return self.data[idx].unsqueeze(0), self.extra_feats[idx], self.labels[idx]
+        if self.extract_feats:
+            sample = self.data[idx]
+        else:
+            sample = self.data[idx].permute(1, 0)  # [T,C]
+        label = self.labels[idx]
+        return sample, label
+
+
+class EEGloader(Dataset):
+    """
+    ```python
+    scenes = ["无电磁环境", "全任务模拟器", "演示验证系统"]
+    tasks = ["脑负荷", "脑疲劳", "脑警觉", "注意力"]
+    [
+            f"data/{scenes[0]}_{task}-1_data.mat",
+            f"data/{scenes[0]}_{task}-2_data.mat",
+    ],
+    ```
+    """
+
+    def __init__(
+        self,
+        args,
+        root_path,  # 父文件夹，使用此需指定 `--root_path ./dataset/EEG/`
+        flag=None,
+    ):
+        """
+        e.g.
+        ```
+        data_set = Data(
+            args = args,
+            root_path=args.root_path,
+            flag=flag,
+        )
+        ```
+        """
+        self.args = args
+        self.root_path = root_path
+        # assert flag in ["train", "test", "val"]
+        self.flag = flag
+
+        scenes = ["无电磁环境", "全任务模拟器", "演示验证系统"]
+        tasks = ["脑负荷", "脑疲劳", "脑警觉", "注意力"]
+
+        # - 训练
+        task = tasks[0]
+        scene = scenes[0]
+        self._processor(
+            file_path_0=os.path.join(root_path, f"data/{scene}_{task}-1_data.mat"),
+            file_path_1=os.path.join(root_path, f"data/{scene}_{task}-2_data.mat"),
+            if_norm=True,
+        )
+
+        self._create_split_dataloaders()
+
+        # # - 真正的 test
+        # task = tasks[0]
+        # scene = scenes[2]
+        # self._processor(
+        #     file_path_0=os.path.join(root_path, f"data/{scene}_{task}-1_data.mat"),
+        #     file_path_1=os.path.join(root_path, f"data/{scene}_{task}-2_data.mat"),
+        #     if_norm=True,
+        # )
+        # self._create_test_dataset()
+
+    def _processor(
+        self, file_path_0: str, file_path_1: str, if_norm: bool = False, if_downsample: bool = False, **kwargs
+    ):
+        """Load data from two files and concatenate them."""
+        print(f"Loading data {file_path_0} & {file_path_1}")
+        self.data_lable_0: np.ndarray = scipy.io.loadmat(file_path_0)["Data"]
+        self.data_lable_1: np.ndarray = scipy.io.loadmat(file_path_1)["Data"]
+
+        assert self.data_lable_0.shape[1] % TIME_POINTS_O == 0
+        assert self.data_lable_1.shape[1] % TIME_POINTS_O == 0
+
+        print(f"{self.data_lable_0.shape = } {self.data_lable_1.shape = }")
+
+        data = np.concatenate((self.data_lable_0, self.data_lable_1), axis=1)  # (8, TIME_POINTS * N)
+        # 每个通道 Normalization
+        # data = (data - data.mean(axis=1, keepdims=True)) / data.std(axis=1, keepdims=True)
+        data = data.reshape((8, -1, TIME_POINTS_O)).transpose((1, 0, 2))  # (N, 8, TIME_POINTS)
+
+        labels = np.concatenate(
+            (
+                np.zeros(self.data_lable_0.shape[1] // TIME_POINTS_O),
+                np.ones(self.data_lable_1.shape[1] // TIME_POINTS_O),
+            )
+        )
+        data = torch.tensor(data, dtype=torch.float32)
+
+        self.labels = torch.tensor(labels, dtype=torch.long)
+        assert data.shape == (len(self.labels), 8, TIME_POINTS_O)
+
+        if if_downsample:
+            # * 降采样
+            global TIME_POINTS
+            # data = self.data[:, :, ::2]
+            data = torch.tensor(
+                scipy.signal.resample(self.data.numpy(), TIME_POINTS_O // 2, axis=-1),
+                dtype=torch.float32,
+            )
+            TIME_POINTS = TIME_POINTS_O // 2
+
+        self.max_seq_len = TIME_POINTS
+        if if_norm:
+            # * 最后一维 Normalization
+            data = (data - data.mean(dim=-1, keepdim=True)) / data.std(dim=-1, keepdim=True)
+
+        self.data = data
+        # self.feature_df = data
+        self.dataset = _MyEEGDataset(data, self.labels, **kwargs)
+        self.class_names = ["0", "1"]
+        self.enc_in = data.shape[1]
+
+    def _create_split_dataloaders(self, train_ratio: float = 0.9) -> tuple[DataLoader, DataLoader]:
+        """创建训练集和验证集的 DataLoader"""
+        train_size = int(train_ratio * len(self.dataset))
+        val_size = len(self.dataset) - train_size
+        # self.train_dataset, self.val_dataset = random_split(self.dataset, [train_size, val_size])
+        # 固定划分 因为存在多次调用建立，所以划分需要固定
+        self.train_dataset = Subset(self.dataset, range(0, train_size))
+        self.val_dataset = Subset(self.dataset, range(train_size, train_size + val_size))
+
+        print(f"EEG 训练集大小：{len(self.train_dataset)} 验证集大小：{len(self.val_dataset)}")
+
+    def _create_test_dataset(self) -> tuple[DataLoader, DataLoader]:
+        """创建训练集和验证集的 DataLoader"""
+        self.train_dataset = None
+        self.test_dataset = self.dataset
+
+    def __getitem__(self, ind):
+        if self.flag == "TRAIN":
+            return self.train_dataset[ind]
+        elif self.flag == "TEST":
+            return self.val_dataset[ind]
+            # return self.test_dataset[ind]
+
+    def __len__(self):
+        if self.flag == "TRAIN":
+            return len(self.train_dataset)
+        elif self.flag == "TEST":
+            return len(self.val_dataset)
+            # return len(self.test_dataset)
+
+
+class EEGloaderMix(Dataset):
+    def __init__(
+        self,
+        args,
+        root_path,  # 父文件夹，使用此需指定 `--root_path ./dataset/EEG/`
+        flag=None,
+    ):
+        """
+        e.g.
+        ```
+        data_set = Data(
+            args = args,
+            root_path=args.root_path,
+            flag=flag,
+        )
+        ```
+        """
+        self.args = args
+        self.root_path = root_path
+        # assert flag in ["train", "test", "val"]
+        self.flag = flag
+
+        scenes = ["无电磁环境", "全任务模拟器", "演示验证系统"]
+        tasks = ["脑负荷", "脑疲劳", "脑警觉", "注意力"]
+
+        # - 训练
+        train_datas = []
+        for scene in scenes:
+            for task in [tasks[1]]:
+                train_datas.append(
+                    self._processor(
+                        file_path_0=os.path.join(root_path, f"data/{scene}_{task}-1_data.mat"),
+                        file_path_1=os.path.join(root_path, f"data/{scene}_{task}-2_data.mat"),
+                    )
+                )
+
+        # 合并数据集
+        train_data = ConcatDataset(train_datas)
+        print(f"合并数据集大小：{len(train_data)}")
+        self.dataset = train_data
+
+        self.max_seq_len = TIME_POINTS
+        self.class_names = ["0", "1"]
+        self.enc_in = 8
+        self._create_split_dataloaders()
+        
+
+    @staticmethod
+    def _processor(file_path_0: str, file_path_1: str, if_norm: bool = True, if_downsample: bool = False, **kwargs):
+        """Load data from two files and concatenate them."""
+        print(f"Loading data {file_path_0} & {file_path_1}")
+        data_lable_0: np.ndarray = scipy.io.loadmat(file_path_0)["Data"]
+        data_lable_1: np.ndarray = scipy.io.loadmat(file_path_1)["Data"]
+
+        assert data_lable_0.shape[1] % TIME_POINTS_O == 0
+        assert data_lable_1.shape[1] % TIME_POINTS_O == 0
+
+        print(f"{data_lable_0.shape = } {data_lable_1.shape = }")
+
+        data = np.concatenate((data_lable_0, data_lable_1), axis=1)  # (8, TIME_POINTS * N)
+        # TODO Normalization 
+        if if_norm:
+            # * Normalization
+            scaler = StandardScaler()
+            data = scaler.fit_transform(data)
+
+
+        # data = (data - data.mean(axis=1, keepdims=True)) / data.std(axis=1, keepdims=True)
+        data = data.reshape((8, -1, TIME_POINTS_O)).transpose((1, 0, 2))  # (N, 8, TIME_POINTS)
+
+        labels = np.concatenate(
+            (
+                np.zeros(data_lable_0.shape[1] // TIME_POINTS_O),
+                np.ones(data_lable_1.shape[1] // TIME_POINTS_O),
+            )
+        )
+        data = torch.tensor(data, dtype=torch.float32)
+
+        labels = torch.tensor(labels, dtype=torch.long)
+        assert data.shape == (len(labels), 8, TIME_POINTS_O)
+
+        if if_downsample:
+            # * 降采样
+            global TIME_POINTS
+            # data = data[:, :, ::2]
+            data = torch.tensor(
+                scipy.signal.resample(data.numpy(), TIME_POINTS_O // 2, axis=-1),
+                dtype=torch.float32,
+            )
+            TIME_POINTS = TIME_POINTS_O // 2
+
+        # self.data = data
+        return _MyEEGDataset(data, labels, **kwargs)
+
+    
+    def _create_split_dataloaders(self, fold_index: int = 2, n_splits: int = 5) -> tuple[DataLoader, DataLoader]:
+        """创建训练集和验证集的 DataLoader，使用 K 折交叉验证"""
+        indices = list(range(len(self.dataset)))
+        kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+        splits = list(kf.split(indices))
+        
+        # 检查 fold_index 是否有效
+        if fold_index < 0 or fold_index >= n_splits:
+            raise ValueError(f"fold_index 应该在 0 和 {n_splits - 1} 之间")
+    
+        train_indices, val_indices = splits[fold_index]
+    
+        self.train_dataset = Subset(self.dataset, train_indices)
+        self.val_dataset = Subset(self.dataset, val_indices)
+    
+        print(f"EEG 训练集大小：{len(self.train_dataset)} 验证集大小：{len(self.val_dataset)}")
+        
+
+    def _create_test_dataset(self) -> tuple[DataLoader, DataLoader]:
+        """创建训练集和验证集的 DataLoader"""
+        self.train_dataset = None
+        self.test_dataset = self.dataset
+
+    def __getitem__(self, ind):
+        # TODO
+        if self.flag == "TRAIN" and self.args.augmentation_ratio > 0:
+            # 获取原始数据和标签
+            batch_x, labels = self.train_dataset[ind]  # batch_x: (8, TIME_POINTS_O), labels: scalar
+            
+            # 添加批次维度以适配增广函数
+            batch_x = batch_x.unsqueeze(0)  # (1, 8, TIME_POINTS_O)
+            labels = labels.unsqueeze(0)    # (1,)
+            
+            # 执行数据增广
+            batch_x, labels, augmentation_tags = run_augmentation_single(batch_x, labels, self.args)
+            # 假设 run_augmentation_single 返回增广后的 batch_x 和 labels
+            
+            # 移除批次维度
+            batch_x = batch_x.squeeze(0)  # (8, TIME_POINTS_O)
+            labels = labels.squeeze(0)    # scalar
+            
+            # 归一化处理
+            # batch_x = self.instance_norm(batch_x)
+            
+            return batch_x, labels
+        
+        if self.flag == "TRAIN":
+            return self.train_dataset[ind]
+        elif self.flag == "TEST":
+            return self.val_dataset[ind]
+
+    def __len__(self):
+        if self.flag == "TRAIN":
+            return len(self.train_dataset)
+        elif self.flag == "TEST":
+            return len(self.val_dataset)

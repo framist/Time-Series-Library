@@ -14,16 +14,24 @@ warnings.filterwarnings('ignore')
 
 
 class Exp_Classification(Exp_Basic):
+    """分类任务"""
     def __init__(self, args):
         super(Exp_Classification, self).__init__(args)
 
     def _build_model(self):
         # model input depends on data
-        train_data, train_loader = self._get_data(flag='TRAIN')
+        if self.args.is_training:
+            train_data, train_loader = self._get_data(flag='TRAIN')
+        else:
+            train_data, train_loader = self._get_data(flag='TEST')  # TODO
         test_data, test_loader = self._get_data(flag='TEST')
         self.args.seq_len = max(train_data.max_seq_len, test_data.max_seq_len)
         self.args.pred_len = 0
-        self.args.enc_in = train_data.feature_df.shape[1]
+        # self.args.enc_in = train_data.feature_df.shape[1]
+        try:
+            self.args.enc_in = train_data.feature_df.shape[1]
+        except AttributeError:
+            self.args.enc_in = train_data.enc_in
         self.args.num_class = len(train_data.class_names)
         # model init
         model = self.model_dict[self.args.model].Model(self.args).float()
@@ -107,9 +115,12 @@ class Exp_Classification(Exp_Basic):
                 batch_x = batch_x.float().to(self.device)
                 padding_mask = padding_mask.float().to(self.device)
                 label = label.to(self.device)
-
+                
+                
                 outputs = self.model(batch_x, padding_mask, None, None)
-                loss = criterion(outputs, label.long().squeeze(-1))
+                if label.dim() > 1:
+                    label = label.squeeze(-1)
+                loss = criterion(outputs, label.long())
                 train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:

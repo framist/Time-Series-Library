@@ -1,5 +1,5 @@
 from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_Custom, Dataset_M4, PSMSegLoader, \
-    MSLSegLoader, SMAPSegLoader, SMDSegLoader, SWATSegLoader, UEAloader
+    MSLSegLoader, SMAPSegLoader, SMDSegLoader, SWATSegLoader, UEAloader, EEGloader, EEGloaderMix
 from data_provider.uea import collate_fn
 from torch.utils.data import DataLoader
 
@@ -9,6 +9,9 @@ data_dict = {
     'ETTm1': Dataset_ETT_minute,
     'ETTm2': Dataset_ETT_minute,
     'custom': Dataset_Custom,
+    # 'custom_EEG': Dataset_Custom_EEG,
+    'EEG': EEGloader,
+    'EEGloaderMix': EEGloaderMix,
     'm4': Dataset_M4,
     'PSM': PSMSegLoader,
     'MSL': MSLSegLoader,
@@ -44,7 +47,7 @@ def data_provider(args, flag):
             num_workers=args.num_workers,
             drop_last=drop_last)
         return data_set, data_loader
-    elif args.task_name == 'classification':
+    elif args.task_name == 'classification':    # <- classification
         drop_last = False
         data_set = Data(
             args = args,
