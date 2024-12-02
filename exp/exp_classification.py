@@ -21,18 +21,19 @@ class Exp_Classification(Exp_Basic):
     def _build_model(self):
         # model input depends on data
         if self.args.is_training:
-            train_data, train_loader = self._get_data(flag='TRAIN')
+            data, train_loader = self._get_data(flag='TRAIN')
+            test_data, test_loader = self._get_data(flag='TEST')
+            self.args.seq_len = max(data.max_seq_len, test_data.max_seq_len)
         else:
-            train_data, train_loader = self._get_data(flag='TEST')  # TODO
-        test_data, test_loader = self._get_data(flag='TEST')
-        self.args.seq_len = max(train_data.max_seq_len, test_data.max_seq_len)
+            data, train_loader = self._get_data(flag='TEST')
+            self.args.seq_len = data.max_seq_len
         self.args.pred_len = 0
         # self.args.enc_in = train_data.feature_df.shape[1]
         try:
-            self.args.enc_in = train_data.feature_df.shape[1]
+            self.args.enc_in = data.feature_df.shape[1]
         except AttributeError:
-            self.args.enc_in = train_data.enc_in
-        self.args.num_class = len(train_data.class_names)
+            self.args.enc_in = data.enc_in
+        self.args.num_class = len(data.class_names)
         # model init
         model = self.model_dict[self.args.model].Model(self.args).float()
         if self.args.use_multi_gpu and self.args.use_gpu:
