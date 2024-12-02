@@ -6,6 +6,7 @@ from exp.exp_imputation import Exp_Imputation
 from exp.exp_short_term_forecasting import Exp_Short_Term_Forecast
 from exp.exp_anomaly_detection import Exp_Anomaly_Detection
 from exp.exp_classification import Exp_Classification
+from exp.exp_sorting import Exp_Sorting
 from utils.print_args import print_args
 import random
 import numpy as np
@@ -20,7 +21,7 @@ if __name__ == '__main__':
 
     # basic config
     parser.add_argument('--task_name', type=str, required=True, default='long_term_forecast',
-                        help='task name, options:[long_term_forecast, short_term_forecast, imputation, classification, anomaly_detection]')
+                        help='task name, options:[long_term_forecast, short_term_forecast, imputation, classification, anomaly_detection, sorting]')
     parser.add_argument('--is_training', type=int, required=True, default=1, help='status')
     parser.add_argument('--model_id', type=str, required=True, default='test', help='model id')
     parser.add_argument('--model', type=str, required=True, default='Autoformer',
@@ -36,6 +37,12 @@ if __name__ == '__main__':
     parser.add_argument('--freq', type=str, default='h',
                         help='freq for time features encoding, options:[s:secondly, t:minutely, h:hourly, d:daily, b:business days, w:weekly, m:monthly], you can also use more detailed freq like 15min or 3h')
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
+
+    # wve data
+    parser.add_argument('--wve_mask', type=str, default='r', help='mask 方式 r: randMask, m: meanMask, c: constMask')
+    parser.add_argument('--wve_mask_hard', type=float, default=0.8, help='hard ratio (%) for mask')
+    parser.add_argument('--rg', type=int, default=9999, help='re-gen data epoch')
+    
 
     # forecasting task
     parser.add_argument('--seq_len', type=int, default=96, help='input sequence length')
@@ -57,7 +64,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_kernels', type=int, default=6, help='for Inception')
     parser.add_argument('--enc_in', type=int, default=7, help='encoder input size')
     parser.add_argument('--dec_in', type=int, default=7, help='decoder input size')
-    parser.add_argument('--c_out', type=int, default=7, help='output size')
+    parser.add_argument('--c_out', type=int, default=7, help='output size or num of classes')
     parser.add_argument('--d_model', type=int, default=512, help='dimension of model')
     parser.add_argument('--n_heads', type=int, default=8, help='num of heads')
     parser.add_argument('--e_layers', type=int, default=2, help='num of encoder layers')
@@ -159,6 +166,8 @@ if __name__ == '__main__':
         Exp = Exp_Anomaly_Detection
     elif args.task_name == 'classification':
         Exp = Exp_Classification
+    elif args.task_name == 'sorting':
+        Exp = Exp_Sorting
     else:
         Exp = Exp_Long_Term_Forecast
 

@@ -16,7 +16,7 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.task_name = configs.task_name
         self.seq_len = configs.seq_len
-        if self.task_name == 'classification' or self.task_name == 'anomaly_detection' or self.task_name == 'imputation':
+        if self.task_name == 'classification' or self.task_name == 'anomaly_detection' or self.task_name == 'imputation' or self.task_name == 'sorting':
             self.pred_len = configs.seq_len
         else:
             self.pred_len = configs.pred_len
@@ -51,6 +51,8 @@ class Model(nn.Module):
         if self.task_name == 'classification':
             self.projection = nn.Linear(
                 configs.enc_in * configs.seq_len, configs.num_class)
+        if self.task_name == 'sorting':
+            self.projection = nn.Linear(configs.enc_in, configs.num_class)
 
     def encoder(self, x):
         seasonal_init, trend_init = self.decompsition(x)
@@ -93,6 +95,13 @@ class Model(nn.Module):
         # (batch_size, num_classes)
         output = self.projection(output)
         return output
+    
+    def sorting(self, x_enc):
+        # Encoder
+        enc_out = self.encoder(x_enc)
+        # (batch_size, seq_length, d_model) -> (batch_size, seq_length, num_classes)
+        output = self.projection(enc_out)
+        return output
 
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
@@ -107,4 +116,7 @@ class Model(nn.Module):
         if self.task_name == 'classification':
             dec_out = self.classification(x_enc)
             return dec_out  # [B, N]
+        if self.task_name == 'sorting':
+            dec_out = self.sorting(x_enc)
+            return dec_out
         return None

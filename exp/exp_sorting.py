@@ -71,8 +71,8 @@ class Exp_Sorting(Exp_Basic):
 
         preds = torch.cat(preds, 0)
         trues = torch.cat(trues, 0)
-        probs = torch.nn.functional.softmax(preds)  # (total_samples, num_classes) est. prob. for each class and sample
-        predictions = torch.argmax(probs, dim=1).cpu().numpy()  # (total_samples,) int class index for each sample
+        probs = torch.nn.functional.softmax(preds)  # (B, L, num_classes) est. prob. for each class and sample
+        predictions = torch.argmax(probs, dim=-1).flatten().cpu().numpy()  # (total_samples,) int class index for each sample
         trues = trues.flatten().cpu().numpy()
         accuracy = cal_accuracy(predictions, trues)
 
@@ -177,8 +177,8 @@ class Exp_Sorting(Exp_Basic):
         trues = torch.cat(trues, 0)
         print('test shape:', preds.shape, trues.shape)
 
-        probs = torch.nn.functional.softmax(preds)  # (total_samples, num_classes) est. prob. for each class and sample
-        predictions = torch.argmax(probs, dim=1).cpu().numpy()  # (total_samples,) int class index for each sample
+        probs = torch.nn.functional.softmax(preds)  # (B, L, num_classes) est. prob. for each class and sample
+        predictions = torch.argmax(probs, dim=-1).flatten().cpu().numpy()  # (total_samples,) int class index for each sample
         trues = trues.flatten().cpu().numpy()
         accuracy = cal_accuracy(predictions, trues)
 

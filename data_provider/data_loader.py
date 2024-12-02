@@ -872,13 +872,15 @@ class UEAloader(Dataset):
     def __len__(self):
         return len(self.all_IDs)
 
+
+# -------------------------------------------------- EEG --------------------------------------------------
+
+
 import scipy
 import scipy.signal
 from scipy import signal
 from scipy.stats import kurtosis, skew
-from torch.utils.data import random_split, ConcatDataset, Subset
-
-TIME_POINTS = TIME_POINTS_O = 1000
+from torch.utils.data import ConcatDataset, Subset
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import KFold
 
@@ -1022,40 +1024,40 @@ class EEGloader(Dataset):
         self, file_path_0: str, file_path_1: str, if_norm: bool = False, if_downsample: bool = False, **kwargs
     ):
         """Load data from two files and concatenate them."""
+        TIME_POINTS = 1000
         print(f"Loading data {file_path_0} & {file_path_1}")
         self.data_lable_0: np.ndarray = scipy.io.loadmat(file_path_0)["Data"]
         self.data_lable_1: np.ndarray = scipy.io.loadmat(file_path_1)["Data"]
 
-        assert self.data_lable_0.shape[1] % TIME_POINTS_O == 0
-        assert self.data_lable_1.shape[1] % TIME_POINTS_O == 0
+        assert self.data_lable_0.shape[1] % TIME_POINTS == 0
+        assert self.data_lable_1.shape[1] % TIME_POINTS == 0
 
         print(f"{self.data_lable_0.shape = } {self.data_lable_1.shape = }")
 
         data = np.concatenate((self.data_lable_0, self.data_lable_1), axis=1)  # (8, TIME_POINTS * N)
         # 每个通道 Normalization
         # data = (data - data.mean(axis=1, keepdims=True)) / data.std(axis=1, keepdims=True)
-        data = data.reshape((8, -1, TIME_POINTS_O)).transpose((1, 0, 2))  # (N, 8, TIME_POINTS)
+        data = data.reshape((8, -1, TIME_POINTS)).transpose((1, 0, 2))  # (N, 8, TIME_POINTS)
 
         labels = np.concatenate(
             (
-                np.zeros(self.data_lable_0.shape[1] // TIME_POINTS_O),
-                np.ones(self.data_lable_1.shape[1] // TIME_POINTS_O),
+                np.zeros(self.data_lable_0.shape[1] // TIME_POINTS),
+                np.ones(self.data_lable_1.shape[1] // TIME_POINTS),
             )
         )
         data = torch.tensor(data, dtype=torch.float32)
 
         self.labels = torch.tensor(labels, dtype=torch.long)
-        assert data.shape == (len(self.labels), 8, TIME_POINTS_O)
+        assert data.shape == (len(self.labels), 8, TIME_POINTS)
 
         if if_downsample:
             # * 降采样
-            global TIME_POINTS
             # data = self.data[:, :, ::2]
             data = torch.tensor(
-                scipy.signal.resample(self.data.numpy(), TIME_POINTS_O // 2, axis=-1),
+                scipy.signal.resample(self.data.numpy(), TIME_POINTS // 2, axis=-1),
                 dtype=torch.float32,
             )
-            TIME_POINTS = TIME_POINTS_O // 2
+            TIME_POINTS = TIME_POINTS // 2
 
         self.max_seq_len = TIME_POINTS
         if if_norm:
@@ -1100,6 +1102,7 @@ class EEGloader(Dataset):
 
 
 class EEGloaderMix(Dataset):
+    """混合场景"""
     def __init__(
         self,
         args,
@@ -1140,15 +1143,15 @@ class EEGloaderMix(Dataset):
         print(f"合并数据集大小：{len(train_data)}")
         self.dataset = train_data
 
-        self.max_seq_len = TIME_POINTS
+        self.max_seq_len = 1000
         self.class_names = ["0", "1"]
         self.enc_in = 8
         self._create_split_dataloaders()
-        
 
     @staticmethod
     def _processor(file_path_0: str, file_path_1: str, if_norm: bool = True, if_downsample: bool = False, **kwargs):
         """Load data from two files and concatenate them."""
+        TIME_POINTS_O = 1000
         print(f"Loading data {file_path_0} & {file_path_1}")
         data_lable_0: np.ndarray = scipy.io.loadmat(file_path_0)["Data"]
         data_lable_1: np.ndarray = scipy.io.loadmat(file_path_1)["Data"]
@@ -1159,12 +1162,11 @@ class EEGloaderMix(Dataset):
         print(f"{data_lable_0.shape = } {data_lable_1.shape = }")
 
         data = np.concatenate((data_lable_0, data_lable_1), axis=1)  # (8, TIME_POINTS * N)
-        # TODO Normalization 
+        # TODO Normalization
         if if_norm:
             # * Normalization
             scaler = StandardScaler()
             data = scaler.fit_transform(data)
-
 
         # data = (data - data.mean(axis=1, keepdims=True)) / data.std(axis=1, keepdims=True)
         data = data.reshape((8, -1, TIME_POINTS_O)).transpose((1, 0, 2))  # (N, 8, TIME_POINTS)
@@ -1182,35 +1184,32 @@ class EEGloaderMix(Dataset):
 
         if if_downsample:
             # * 降采样
-            global TIME_POINTS
             # data = data[:, :, ::2]
             data = torch.tensor(
                 scipy.signal.resample(data.numpy(), TIME_POINTS_O // 2, axis=-1),
                 dtype=torch.float32,
             )
-            TIME_POINTS = TIME_POINTS_O // 2
+            TIME_POINTS_O = TIME_POINTS_O // 2
 
         # self.data = data
         return _MyEEGDataset(data, labels, **kwargs)
 
-    
     def _create_split_dataloaders(self, fold_index: int = 2, n_splits: int = 5) -> tuple[DataLoader, DataLoader]:
         """创建训练集和验证集的 DataLoader，使用 K 折交叉验证"""
         indices = list(range(len(self.dataset)))
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
         splits = list(kf.split(indices))
-        
+
         # 检查 fold_index 是否有效
         if fold_index < 0 or fold_index >= n_splits:
             raise ValueError(f"fold_index 应该在 0 和 {n_splits - 1} 之间")
-    
+
         train_indices, val_indices = splits[fold_index]
-    
+
         self.train_dataset = Subset(self.dataset, train_indices)
         self.val_dataset = Subset(self.dataset, val_indices)
-    
+
         print(f"EEG 训练集大小：{len(self.train_dataset)} 验证集大小：{len(self.val_dataset)}")
-        
 
     def _create_test_dataset(self) -> tuple[DataLoader, DataLoader]:
         """创建训练集和验证集的 DataLoader"""
@@ -1222,24 +1221,24 @@ class EEGloaderMix(Dataset):
         if self.flag == "TRAIN" and self.args.augmentation_ratio > 0:
             # 获取原始数据和标签
             batch_x, labels = self.train_dataset[ind]  # batch_x: (8, TIME_POINTS_O), labels: scalar
-            
+
             # 添加批次维度以适配增广函数
             batch_x = batch_x.unsqueeze(0)  # (1, 8, TIME_POINTS_O)
             labels = labels.unsqueeze(0)    # (1,)
-            
+
             # 执行数据增广
             batch_x, labels, augmentation_tags = run_augmentation_single(batch_x, labels, self.args)
             # 假设 run_augmentation_single 返回增广后的 batch_x 和 labels
-            
+
             # 移除批次维度
             batch_x = batch_x.squeeze(0)  # (8, TIME_POINTS_O)
             labels = labels.squeeze(0)    # scalar
-            
+
             # 归一化处理
             # batch_x = self.instance_norm(batch_x)
-            
+
             return batch_x, labels
-        
+
         if self.flag == "TRAIN":
             return self.train_dataset[ind]
         elif self.flag == "TEST":
@@ -1250,3 +1249,149 @@ class EEGloaderMix(Dataset):
             return len(self.train_dataset)
         elif self.flag == "TEST":
             return len(self.val_dataset)
+
+
+# -------------------------------------------------- Radio --------------------------------------------------
+from data_provider.ebdsc_2nd import mix_data_gen, to_dict, read_dfs
+
+
+class EBDSC_2nd(Dataset):
+    TAG_LEN = 12
+    # WINDOW_SIZE = 1024
+    DROP_SIG_RATIO = 0.99
+    
+    def __init__(
+        self,
+        args,
+        root_path,
+        win_size,
+        flag=None,
+        if_emb=False,
+    ):
+        """
+
+        Args:
+            args (_type_): _description_
+            root_path 父文件夹，使用此需指定 `--root_path ./dataset/EBDSC-2nd/` 暂时弃用
+            flag (_type_, optional): _description_. Defaults to None.
+        """
+        assert args.enc_in == 5
+        assert args.c_out == self.TAG_LEN
+        assert flag in ["TRAIN", "VALID", "TEST"]
+        
+        
+        self.args = args
+        self.root_path = root_path
+        self.flag = flag
+
+        df_list, test_df_list = read_dfs()
+
+        if flag == "TRAIN":
+            d_train = mix_data_gen(df_list, 100, 100, 25, True)
+            self.inputs, self.targets = self.make_data(d_train)
+        elif flag == "VALID":
+            d_valid = mix_data_gen(df_list, 20, 50, 20, True)
+            self.inputs, self.targets = self.make_data(d_valid)
+        elif flag == "TEST":
+            d_test = []
+            for test_df in test_df_list:
+                for i in range(0, test_df.shape[0] - win_size, win_size):
+                    df_window = test_df.iloc[i : i + win_size, :]
+                    m2, m3 = to_dict(df_window)
+                    d_test.append([m2, m3])
+            self.inputs, self.targets = self.make_data(d_test)
+
+        if not if_emb:
+            return
+        else:
+            print(f'needed args: {args.d_model=}, {args.wve_mask=}, {args.wve_mask_hard=}')
+            self.d_model = args.d_model
+            self.hard = args.wve_mask_hard if flag == "TRAIN" else 0
+            
+            self.d_step = 8
+            # mod_max = 65536 = 2**N 因为满足 2 ** (N*d_step/d_model) == 2
+            mod_max = 65536
+            # div_term
+            # self.div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model)).to(device)
+            # self.div_term = (1. / (65536 ** (torch.arange(0, d_model, 2) / d_model))).to(device)
+            self.div_term = 1.0 / (mod_max ** (torch.arange(0, self.d_model, self.d_step) / self.d_model))
+            # mod_d = lambda d: mod_max ** (np.floor(d/d_step)*d_step / d_model)
+            # 根据 mod 查维度，上界 <
+            self.d_mod = lambda m: np.floor(self.d_step * np.log2(m)).astype(np.int64) + 1
+
+            if args.wve_mask == 'r':
+                self.f_mask  = lambda x: torch.rand_like(x) * 2 - 1
+            elif args.wve_mask == 'm':
+                self.f_mask  = lambda x: torch.mean(x, axis=0)
+            elif args.wve_mask == 'c':
+                self.f_mask  = lambda x: torch.zeros_like(x)
+            else:
+                raise ValueError(f'{args.wve_mask=} not supported')
+
+    @staticmethod
+    def make_data(d: list[list[np.ndarray]]):
+        """生成数据集
+        Args:
+            d 数据集
+        Returns:
+            inputs2 = 特征
+            targets = [[TAG] * 时间窗长度] * 样本数 one-hot 编码
+        """
+        inputs = np.array([i[0] for i in d], dtype=np.float32)
+        targets = np.array([i[-1] for i in d], dtype=np.int64) - 1
+        return torch.FloatTensor(inputs), torch.LongTensor(targets)
+
+    def __getitem__(self, ind):
+        idx = ind
+
+        if not hasattr(self, "d_model"):
+            inputs = self.inputs[idx]
+            # 除第一个维度，每一个维度正则化
+            inputs = (inputs - inputs.mean(axis=0)) / inputs.std(axis=0)
+            inputs[:, 0] = (self.inputs[idx][:, 0] / 5e5 - 0.0002) / 0.0005
+            # inputs = self.inputs[idx] / 65536 # old use
+            # inputs = self.inputs[idx]
+            # # !!! input[:, 0] = label
+            # inputs[:, 0] = self.targets[idx][:, 0]
+            return inputs, self.targets[idx]
+
+        # * POS [1024, 5] -> [1024, 5, 128]
+        positions: torch.FloatTensor = self.inputs[idx]  # [1024, 5]
+        win_size, input_channels = positions.size()
+        pe = torch.zeros(win_size, input_channels, self.d_model)
+
+        positions = positions.unsqueeze(-1)  # [1024, 5, 1]
+
+        # pe[:, :, 0::2] = torch.sin(positions * self.div_term * torch.pi)
+        # pe[:, :, 1::2] = torch.cos(positions * self.div_term * torch.pi)
+
+        for i in range(self.d_step):
+            pe[:, :, i :: self.d_step] = (positions * self.div_term + 1 / self.d_step * i) % 1 * 2 - 1
+            # # linearV
+            # pe[:, :, i::self.d_step] = torch.absolute((positions * self.div_term + 1 / self.d_step * i) % 1 - 0.5) * 2 - 1
+
+        if self.hard:
+
+            if np.random.rand() < 1 * self.hard:
+                # 1 RF mimax in 5 ~ 28
+                mask_d_min = np.random.randint(self.d_mod(5), self.d_mod(60))
+                pe[:, 1, mask_d_min:] = self.f_mask(pe[:, 1, mask_d_min:])
+
+            if np.random.rand() < 1 * self.hard:
+                # 2 PW * 10 mimax in 6 ~ 50
+                mask_d_min = np.random.randint(self.d_mod(6), self.d_mod(100))
+                pe[:, 2, mask_d_min:] = self.f_mask(pe[:, 2, mask_d_min:])
+
+            if np.random.rand() < 0.1 * self.hard:
+                # 3 RF ?
+                pe[:, 3, :] = self.f_mask(pe[:, 3, :])
+
+            if np.random.rand() < 0.5 * self.hard:
+                # 4 DOA mimax in 6 ~ 7
+                mask_d_min = np.random.randint(self.d_mod(6), self.d_mod(14))
+                pe[:, 4, mask_d_min:] = self.f_mask(pe[:, 4, mask_d_min:])
+
+        return pe, self.targets[idx]
+
+    def __len__(self):
+        return self.inputs.shape[0]
