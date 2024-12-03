@@ -10,6 +10,7 @@ python -u run.py \
   --root_path ./dataset/EBDSC-2nd/ \
   --model_id EBDSC_2nd \
   --data EBDSC_2nd \
+  --data_regen_epoch 1 \
   --seq_len 1024 \
   --enc_in 5 \
   --c_out 12 \

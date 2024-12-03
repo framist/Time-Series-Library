@@ -82,7 +82,7 @@ class Exp_Sorting(Exp_Basic):
 
     def train(self, setting):
         """
-        TODO: 重生成数据集
+        TODO: lr schedule
         """
         recorder = ExperimentRecorder(setting)
         
@@ -103,6 +103,10 @@ class Exp_Sorting(Exp_Basic):
         criterion = self._select_criterion()
 
         for epoch in range(self.args.train_epochs):
+            # 重生成数据集
+            if epoch % self.args.data_regen_epoch == 0 and epoch >= 0:
+                _, train_loader = self._get_data(flag='TRAIN')
+                _, vali_loader = self._get_data(flag='VALID')
             iter_count = 0
             train_loss = []
 
@@ -146,13 +150,13 @@ class Exp_Sorting(Exp_Basic):
             recorder.add_record("valid", vali_loss)
             recorder.add_record("test", test_loss)
             recorder.add_record("acc", test_accuracy)
+            recorder.plot_loss(self.args.des, save_fig=True)
             
             early_stopping(-val_accuracy, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
 
-        recorder.plot_loss(self.args.des, save_fig=True)
         recorder.save_records()
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))

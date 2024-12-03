@@ -41,7 +41,7 @@ if __name__ == '__main__':
     # wve data
     parser.add_argument('--wve_mask', type=str, default='r', help='mask 方式 r: randMask, m: meanMask, c: constMask')
     parser.add_argument('--wve_mask_hard', type=float, default=0.8, help='hard ratio (%) for mask')
-    parser.add_argument('--rg', type=int, default=9999, help='re-gen data epoch')
+    parser.add_argument('--data_regen_epoch', type=int, default=9999, help='re-gen data epoch')
     
 
     # forecasting task
