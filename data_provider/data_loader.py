@@ -1252,7 +1252,7 @@ class EEGloaderMix(Dataset):
 
 
 # -------------------------------------------------- Radio --------------------------------------------------
-from data_provider.ebdsc_2nd import mix_data_gen, to_dict, read_dfs
+from data_provider.ebdsc_2nd import mix_data_gen, to_dict, read_dfs, target_domain_data_gen
 
 
 class EBDSC_2nd(Dataset):
@@ -1292,7 +1292,9 @@ class EBDSC_2nd(Dataset):
         elif flag == "VALID":
             d_valid = mix_data_gen(df_list, 20, 50, 20, True)
             self.inputs, self.targets = self.make_data(d_valid)
-        elif flag == "TEST":
+        elif flag == "TEST":        # TODO
+            self.inputs, self.targets = self.make_data(target_domain_data_gen(test_df_list[2], 20, 50))
+        elif flag == "TEST_ALL":    # TODO
             d_test = []
             for test_df in test_df_list:
                 for i in range(0, test_df.shape[0] - win_size, win_size):
@@ -1300,7 +1302,7 @@ class EBDSC_2nd(Dataset):
                     m2, m3 = to_dict(df_window)
                     d_test.append([m2, m3])
             self.inputs, self.targets = self.make_data(d_test)
-
+            
         if not if_emb:
             return
         else:

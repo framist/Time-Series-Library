@@ -22,8 +22,9 @@ class Exp_Sorting(Exp_Basic):
         # self.args.seq_len = self.args.pred_len 窗口长度
         # self.args.enc_in 通道数
         # self.args.c_out 分类数
-        print(f'needed args: {self.args.seq_len=}, {self.args.enc_in=}, {self.args.c_out=}')
+        print(f'Exp_Sorting needed args: {self.args.seq_len=}, {self.args.enc_in=}, {self.args.c_out=}')
         self.args.num_class = self.args.c_out
+        self.args.pred_len = 0
         
         # model init
         model = self.model_dict[self.args.model].Model(self.args).float()
@@ -41,7 +42,7 @@ class Exp_Sorting(Exp_Basic):
         return model_optim
 
     def _select_criterion(self):
-        def criterion(outputs: torch.FloatTensor, targets: torch.FloatTensor):
+        def criterion(outputs: torch.FloatTensor, targets: torch.Tensor):
             # loss_1 = focal_loss(outputs.view(-1, 12), targets.view(-1), alpha=None, reduction='mean')
             loss_1 = nn.CrossEntropyLoss()(outputs.view(-1, 12), targets.view(-1))
             return loss_1
@@ -83,6 +84,8 @@ class Exp_Sorting(Exp_Basic):
         """
         TODO: 重生成数据集
         """
+        recorder = ExperimentRecorder(setting)
+        
         _, train_loader = self._get_data(flag='TRAIN')
         _, vali_loader = self._get_data(flag='VALID')
         _, test_loader = self._get_data(flag='TEST')
@@ -139,11 +142,18 @@ class Exp_Sorting(Exp_Basic):
             print(
                 "Epoch: {0}, Steps: {1} | Train Loss: {2:.3f} Vali Loss: {3:.3f} Vali Acc: {4:.3f} Test Loss: {5:.3f} Test Acc: {6:.3f}"
                 .format(epoch + 1, train_steps, train_loss, vali_loss, val_accuracy, test_loss, test_accuracy))
+            recorder.add_record("train", train_loss)
+            recorder.add_record("valid", vali_loss)
+            recorder.add_record("test", test_loss)
+            recorder.add_record("acc", test_accuracy)
+            
             early_stopping(-val_accuracy, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
 
+        recorder.plot_loss(self.args.des, save_fig=True)
+        recorder.save_records()
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
 
@@ -196,3 +206,68 @@ class Exp_Sorting(Exp_Basic):
         f.write('\n')
         f.close()
         return
+
+
+import json
+import matplotlib.pyplot as plt
+import datetime
+
+class ExperimentRecorder:
+    """实验数据记录器"""
+    
+    def __init__(self, exp_name, save_dir='./results'):
+        self.exp_name = exp_name
+        self.save_dir = os.path.join(save_dir, exp_name)
+        self.loss_record: dict[str, list[float]] = {
+            "train": [],
+            "valid": [], 
+            "test": [],
+            "acc": []   # test acc
+        }
+        
+        # 创建保存目录
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+            
+    def add_record(self, record_type, value):
+        """添加记录
+        Args:
+            record_type: 记录类型 ('train'/'valid'/'test'/'acc')
+            value: 要记录的值
+        """
+        if record_type in self.loss_record:
+            self.loss_record[record_type].append(float(value))
+        else:
+            raise ValueError(f"Unknown record type: {record_type}")
+            
+    def save_records(self):
+        """保存记录到 JSON 文件"""
+        now = datetime.datetime.now().strftime("%Y%m%d%H%M%S") 
+        save_path = os.path.join(self.save_dir, f'experiment_records_{now}.json')
+        with open(save_path, 'w') as f:
+            json.dump(self.loss_record, f, indent=2)
+            
+    def load_records(self):
+        """从 JSON 文件加载记录"""
+        load_path = os.path.join(self.save_dir, 'experiment_records.json')
+        if os.path.exists(load_path):
+            with open(load_path, 'r') as f:
+                self.loss_record = json.load(f)                
+                
+    def plot_loss(self, plot_name: str, save_fig=True):
+        loss_record = self.loss_record
+        plt.figure()
+        plt.plot(loss_record["train"], label="train", linestyle="-", marker=".", linewidth=1, alpha=0.6)
+        plt.plot(loss_record["valid"], label="valid", linestyle="-", marker=".", linewidth=1, alpha=0.6)
+        plt.plot(loss_record["test"], label="test", alpha=0.9)
+        plt.plot(loss_record["acc"], label="acc", alpha=0.9)
+        plt.grid()
+        plt.ylim(0, 3)
+        plt.legend()
+        plt.xlabel('epoch')
+        plt.ylabel('loss')
+        plt.title(f'{plot_name}\nmax acc: {max(loss_record["acc"]):.3f} min loss:{min(loss_record["test"]):.5f}')
+        if save_fig:
+            plt.savefig(f'{self.save_dir}/{plot_name}_loss.pdf')
+        plt.show()
+        plt.close()
