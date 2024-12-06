@@ -27,6 +27,9 @@ class Exp_Sorting(Exp_Basic):
         print(f"Exp_Sorting needed args: {self.args.seq_len=}, {self.args.enc_in=}, {self.args.c_out=}")
         self.args.num_class = self.args.c_out
         self.args.pred_len = 0
+        if self.args.embed == "prepos":
+            print(f'prepos args: {self.args.d_model=}, {self.args.wve_mask=}, {self.args.wve_mask_hard=}')
+        
 
         # model init
         model = self.model_dict[self.args.model].Model(self.args).float()
@@ -57,12 +60,11 @@ class Exp_Sorting(Exp_Basic):
         trues = []
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, label, padding_mask) in enumerate(vali_loader):
+            for i, (batch_x, label) in enumerate(vali_loader):
                 batch_x = batch_x.float().to(self.device)
-                padding_mask = padding_mask.float().to(self.device)
                 label = label.to(self.device)
 
-                outputs = self.model(batch_x, padding_mask, None, None)
+                outputs = self.model(batch_x, None, None, None)
 
                 pred = outputs.detach().cpu()
                 loss = criterion(pred, label.long().cpu())
@@ -118,15 +120,14 @@ class Exp_Sorting(Exp_Basic):
             self.model.train()
             epoch_time = time.time()
 
-            for i, (batch_x, label_y, padding_mask) in enumerate(train_loader):
+            for i, (batch_x, label_y) in enumerate(train_loader):
                 iter_count += 1
                 model_optim.zero_grad()
 
                 batch_x: torch.Tensor = batch_x.float().to(self.device)
-                padding_mask = padding_mask.float().to(self.device)
                 label_y: torch.Tensor = label_y.to(self.device)
 
-                outputs = self.model(batch_x, padding_mask, None, None)
+                outputs = self.model(batch_x, None, None, None)
                 loss = criterion(outputs, label_y.long())
                 train_loss.append(loss.item())
 
@@ -201,12 +202,11 @@ class Exp_Sorting(Exp_Basic):
 
                 self.model.eval()
                 with torch.no_grad():
-                    for i, (batch_x, label, padding_mask) in enumerate(test_loader):
+                    for i, (batch_x, label) in enumerate(test_loader):
                         batch_x = batch_x.float().to(self.device)
-                        padding_mask = padding_mask.float().to(self.device)
                         label = label.to(self.device)
 
-                        outputs = self.model(batch_x, padding_mask, None, None)
+                        outputs = self.model(batch_x, None, None, None)
 
                         preds.append(outputs.detach())
                         trues.append(label)

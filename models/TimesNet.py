@@ -204,7 +204,7 @@ class Model(nn.Module):
         output = self.projection(output)  # (batch_size, num_classes)
         return output
     
-    def sorting(self, x_enc, x_mark_enc):
+    def sorting(self, x_enc):
         # embedding
         enc_out = self.enc_embedding(x_enc, None)  # [B,T,C]
         # TimesNet
@@ -215,8 +215,7 @@ class Model(nn.Module):
         # the output transformer encoder/decoder embeddings don't include non-linearity
         output = self.act(enc_out)
         output = self.dropout(output)
-        # zero-out padding embeddings
-        output = output * x_mark_enc.unsqueeze(-1)
+        
         # (batch_size, seq_length, d_model) -> (batch_size, seq_length, num_classes)
         output = self.projection(output)  # (batch_size, seq_length, num_classes)
         return output
@@ -236,6 +235,6 @@ class Model(nn.Module):
             dec_out = self.classification(x_enc, x_mark_enc)
             return dec_out  # [B, N]
         if self.task_name == 'sorting':
-            dec_out = self.sorting(x_enc, x_mark_enc)
+            dec_out = self.sorting(x_enc)
             return dec_out
         return None

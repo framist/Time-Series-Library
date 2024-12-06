@@ -76,13 +76,9 @@ if __name__ == '__main__':
                         help='whether to use distilling in encoder, using this argument means not using distilling',
                         default=True) # only in Informer ?
     parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
-    # embed
-    # - timeF: use TimeFeatureEmbedding
-    # - fixed: use FixedEmbedding,
-    # - learned: use nn.Embedding
-    # - pre: dataset dataloader 输入数据已经是嵌入向量
+    # embed args defined in layers/Embed.py `DataEmbedding`
     parser.add_argument('--embed', type=str, default='timeF',
-                        help='time features encoding, options:[timeF, fixed, learned, pre]')
+                        help='time features encoding, options:[timeF, fixed, learned, vpos, prepos]')
     parser.add_argument('--activation', type=str, default='gelu', help='activation')
     parser.add_argument('--channel_independence', type=int, default=1,
                         help='0: channel dependence 1: channel independence for FreTS model')
@@ -97,7 +93,7 @@ if __name__ == '__main__':
                         help='the length of segmen-wise iteration of SegRNN')
 
     # optimization
-    parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
+    parser.add_argument('--num_workers', type=int, default=4, help='data loader num workers')
     parser.add_argument('--itr', type=int, default=1, help='experiments times')
     parser.add_argument('--train_epochs', type=int, default=10, help='train epochs')
     parser.add_argument('--batch_size', type=int, default=32, help='batch size of train input data')
@@ -184,7 +180,8 @@ if __name__ == '__main__':
         names.append(f'{args.data}')
         names.append(f'{args.des}')
         # names.append(f'ft{args.features}')
-        names.append(f'sl{args.seq_len}')
+        # names.append(f'sl{args.seq_len}')
+        names.append(f'emb_{args.embed}')
         # names.append(f'll{args.label_len}')
         # names.append(f'pl{args.pred_len}')
         names.append(f'dm{args.d_model}')

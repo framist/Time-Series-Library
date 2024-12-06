@@ -1265,7 +1265,6 @@ class EBDSC_2nd(Dataset):
         root_path,
         win_size,
         flag=None,
-        if_emb=False,
     ):
         """
 
@@ -1277,7 +1276,8 @@ class EBDSC_2nd(Dataset):
         assert args.enc_in == 5
         assert args.c_out == self.TAG_LEN
         assert flag in ["TRAIN", "VALID", "TEST_MINI", "TEST_ALL", "SCENE_I", "SCENE_II", "SCENE_III"]
-        # print(f'EBDSC_2nd setting: {win_size=}, {flag=}, {if_emb=}')
+        if_emb = True if args.embed == "prepos" else False
+        print(f'EBDSC_2nd setting: {win_size=}, {flag=}, {args.embed=}, {if_emb=}')
         
         
         self.args = args
@@ -1314,7 +1314,7 @@ class EBDSC_2nd(Dataset):
         if not if_emb:
             return
         else:
-            print(f'needed args: {args.d_model=}, {args.wve_mask=}, {args.wve_mask_hard=}')
+            # print(f'needed args: {args.d_model=}, {args.wve_mask=}, {args.wve_mask_hard=}')
             self.d_model = args.d_model
             self.hard = args.wve_mask_hard if flag == "TRAIN" else 0
             

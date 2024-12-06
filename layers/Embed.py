@@ -27,6 +27,7 @@ class PositionalEmbedding(nn.Module):
 
 
 class TokenEmbedding(nn.Module):
+    """注意：在时间和通道维度上卷积"""
     def __init__(self, c_in, d_model):
         super(TokenEmbedding, self).__init__()
         padding = 1 if torch.__version__ >= '1.5.0' else 2
@@ -119,27 +120,41 @@ class DataEmbedding(nn.Module):
             c_in (_type_): _description_
             d_model (_type_): _description_
             embed_type (str, optional):
+                只作用于 x_mark，x 使用 TokenEmbedding
                 - timeF: use TimeFeatureEmbedding
                 - fixed: use FixedEmbedding,
                 - learned: use nn.Embedding
-                - pre: dataset dataloader 数据已经是嵌入向量，但仍添加位置编码      <- my new
+                只作用于 x，无 x_mark :
+                - vpos: value_embedding + position_embedding, none time features encoding
+                - prepos: position_embedding, dataset dataloader 数据已经是嵌入向量，但仍添加位置编码      <- my new
             freq (str, optional): _description_. Defaults to 'h'.
             dropout (float, optional): _description_. Defaults to 0.1.
+            
+        TODO:
+            x1 = self.value_embedding(x)
+            x2 = self.position_embedding(x)
+            print(x1.shape, x2.shape)
+        torch.Size([64, 1024, 5, 64]) torch.Size([1, 1024, 64])
         """
         super(DataEmbedding, self).__init__()
-        if embed_type == "pre":
+        if embed_type == "prepos":
             self.value_embedding = nn.Identity()
+            raise NotImplementedError("prepos is not implemented yet.")
         else:
             self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
         self.position_embedding = PositionalEmbedding(d_model=d_model)
 
+        self.dropout = nn.Dropout(p=dropout)
+        
+        if embed_type in ["vpos", "prepos"]:
+            return
+        
         # 只作用于 x_mark
         self.temporal_embedding = (
             TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
             if embed_type != "timeF"
             else TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
         )  # 利用 `x_mark`
-        self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x: torch.FloatTensor, x_mark: torch.Tensor):
         """
