@@ -1276,9 +1276,8 @@ class EBDSC_2nd(Dataset):
         """
         assert args.enc_in == 5
         assert args.c_out == self.TAG_LEN
-        assert flag in ["TRAIN", "VALID", "TEST"]
-        print(f'EBDSC_2nd setting:')
-        print(f'    {win_size=}, {flag=}, {if_emb=}')
+        assert flag in ["TRAIN", "VALID", "TEST_MINI", "TEST_ALL", "SCENE_I", "SCENE_II", "SCENE_III"]
+        # print(f'EBDSC_2nd setting: {win_size=}, {flag=}, {if_emb=}')
         
         
         self.args = args
@@ -1293,11 +1292,19 @@ class EBDSC_2nd(Dataset):
         elif flag == "VALID":
             d_valid = mix_data_gen(df_list, 20, 50, 20, True)
             self.inputs, self.targets = self.make_data(d_valid)
-        elif flag == "TEST":        # TODO
+        elif flag == "TEST_MINI":
             self.inputs, self.targets = self.make_data(target_domain_data_gen(test_df_list[2], 20, 50))
-        elif flag == "TEST_ALL":    # TODO
+        else:
+            if flag == "TEST_ALL":
+                l = test_df_list
+            elif flag == "SCENE_I":
+                l = [test_df_list[0]]
+            elif flag == "SCENE_II":
+                l = [test_df_list[1]]
+            elif flag == "SCENE_III":
+                l = [test_df_list[2]]
             d_test = []
-            for test_df in test_df_list:
+            for test_df in l:
                 for i in range(0, test_df.shape[0] - win_size, win_size):
                     df_window = test_df.iloc[i : i + win_size, :]
                     m2, m3 = to_dict(df_window)
