@@ -39,7 +39,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
 
     # wve data
-    parser.add_argument('--wve_mask', type=str, default='r', help='mask 方式 r: randMask, m: meanMask, c: constMask')
+    parser.add_argument('--wve_mask', type=str, default='r', help='masking function in WVE - r: randMask, m: meanMask, c: constMask')
     parser.add_argument('--wve_mask_hard', type=float, default=0.8, help='hard ratio (%) for mask')
     parser.add_argument('--data_regen_epoch', type=int, default=9999, help='re-gen data epoch')
     
@@ -74,10 +74,15 @@ if __name__ == '__main__':
     parser.add_argument('--factor', type=int, default=1, help='attn factor')
     parser.add_argument('--distil', action='store_false',
                         help='whether to use distilling in encoder, using this argument means not using distilling',
-                        default=True)
+                        default=True) # only in Informer ?
     parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
+    # embed
+    # - timeF: use TimeFeatureEmbedding
+    # - fixed: use FixedEmbedding,
+    # - learned: use nn.Embedding
+    # - pre: dataset dataloader 输入数据已经是嵌入向量
     parser.add_argument('--embed', type=str, default='timeF',
-                        help='time features encoding, options:[timeF, fixed, learned]')
+                        help='time features encoding, options:[timeF, fixed, learned, pre]')
     parser.add_argument('--activation', type=str, default='gelu', help='activation')
     parser.add_argument('--channel_independence', type=int, default=1,
                         help='0: channel dependence 1: channel independence for FreTS model')
@@ -169,32 +174,37 @@ if __name__ == '__main__':
     elif args.task_name == 'sorting':
         Exp = Exp_Sorting
     else:
-        Exp = Exp_Long_Term_Forecast
+        raise ValueError(f'Invalid task name: {args.task_name}')
 
+    def named_setting(args, ii: int):
+        names = []
+        names.append(f'{args.task_name}')
+        # names.append(f'{args.model_id}')
+        names.append(f'{args.model}')
+        names.append(f'{args.data}')
+        names.append(f'{args.des}')
+        # names.append(f'ft{args.features}')
+        names.append(f'sl{args.seq_len}')
+        # names.append(f'll{args.label_len}')
+        # names.append(f'pl{args.pred_len}')
+        names.append(f'dm{args.d_model}')
+        names.append(f'nh{args.n_heads}')
+        names.append(f'el{args.e_layers}')
+        # names.append(f'dl{args.d_layers}')
+        names.append(f'df{args.d_ff}')
+        # names.append(f'expand{args.expand}')
+        # names.append(f'dc{args.d_conv}')
+        # names.append(f'fc{args.factor}')
+        # names.append(f'eb{args.embed}')
+        # names.append(f'dt{args.distil}')
+        names.append(f'{ii}')
+        return '_'.join(names)
+    
     if args.is_training:
         for ii in range(args.itr):
             # setting record of experiments
             exp = Exp(args)  # set experiments
-            setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
-                args.task_name,
-                args.model_id,
-                args.model,
-                args.data,
-                args.features,
-                args.seq_len,
-                args.label_len,
-                args.pred_len,
-                args.d_model,
-                args.n_heads,
-                args.e_layers,
-                args.d_layers,
-                args.d_ff,
-                args.expand,
-                args.d_conv,
-                args.factor,
-                args.embed,
-                args.distil,
-                args.des, ii)
+            setting = named_setting(args, ii)
 
             print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
             exp.train(setting)
@@ -205,26 +215,7 @@ if __name__ == '__main__':
     else:
         ii = 0
         exp = Exp(args)  # set experiments
-        setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
-            args.task_name,
-            args.model_id,
-            args.model,
-            args.data,
-            args.features,
-            args.seq_len,
-            args.label_len,
-            args.pred_len,
-            args.d_model,
-            args.n_heads,
-            args.e_layers,
-            args.d_layers,
-            args.d_ff,
-            args.expand,
-            args.d_conv,
-            args.factor,
-            args.embed,
-            args.distil,
-            args.des, ii)
+        setting = named_setting(args, ii)
 
         print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
         exp.test(setting, test=1)

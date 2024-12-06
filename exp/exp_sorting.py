@@ -171,9 +171,6 @@ class Exp_Sorting(Exp_Basic):
 
         preds = []
         trues = []
-        folder_path = './test_results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
 
         self.model.eval()
         with torch.no_grad():
@@ -197,7 +194,7 @@ class Exp_Sorting(Exp_Basic):
         accuracy = cal_accuracy(predictions, trues)
 
         # result save
-        folder_path = './results/' + setting + '/'
+        folder_path = './results/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 

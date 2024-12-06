@@ -31,6 +31,13 @@ class Inception_Block_V1(nn.Module):
 
 
 class Inception_Block_V2(nn.Module):
+    """这是一个改进版的 Inception 模块，主要区别在于使用了分解的卷积核。关键特点：
+
+    将 nxn 的卷积分解为 1xn 和 nx1 的两个卷积
+    保留了一个 1x1 的卷积分支
+    同样 stack 所有结果并取平均
+    通过分解可以减少参数量和计算量
+    """
     def __init__(self, in_channels, out_channels, num_kernels=6, init_weight=True):
         super(Inception_Block_V2, self).__init__()
         self.in_channels = in_channels

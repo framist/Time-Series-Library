@@ -43,11 +43,14 @@ class TokenEmbedding(nn.Module):
 
 
 class FixedEmbedding(nn.Module):
+    """固定的位置编码：对 x 的值进行固定编码 原仓库只作用于 x_mark（时间信息）
+        embed_type == 'fixed'
+    """
     def __init__(self, c_in, d_model):
         super(FixedEmbedding, self).__init__()
 
         w = torch.zeros(c_in, d_model).float()
-        w.require_grad = False
+        w.requires_grad = False # 代码中的 w.require_grad = False 应更正为 w.requires_grad = False，以正确设置张量的 requires_grad 属性
 
         position = torch.arange(0, c_in).float().unsqueeze(1)
         div_term = (torch.arange(0, d_model, 2).float()
@@ -64,6 +67,7 @@ class FixedEmbedding(nn.Module):
 
 
 class TemporalEmbedding(nn.Module):
+    """适用于离散的时间特征，通过嵌入层将索引映射为嵌入向量"""
     def __init__(self, d_model, embed_type='fixed', freq='h'):
         super(TemporalEmbedding, self).__init__()
 
@@ -94,6 +98,7 @@ class TemporalEmbedding(nn.Module):
 
 
 class TimeFeatureEmbedding(nn.Module):
+    """将时间视为连续特征，通过线性映射捕捉时间的数值变化趋势"""
     def __init__(self, d_model, embed_type='timeF', freq='h'):
         super(TimeFeatureEmbedding, self).__init__()
 
@@ -107,22 +112,50 @@ class TimeFeatureEmbedding(nn.Module):
 
 
 class DataEmbedding(nn.Module):
-    def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
-        super(DataEmbedding, self).__init__()
+    def __init__(self, c_in, d_model, embed_type="timeF", freq="h", dropout=0.1):
+        """_summary_
 
-        self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
+        Args:
+            c_in (_type_): _description_
+            d_model (_type_): _description_
+            embed_type (str, optional):
+                - timeF: use TimeFeatureEmbedding
+                - fixed: use FixedEmbedding,
+                - learned: use nn.Embedding
+                - pre: dataset dataloader 数据已经是嵌入向量，但仍添加位置编码      <- my new
+            freq (str, optional): _description_. Defaults to 'h'.
+            dropout (float, optional): _description_. Defaults to 0.1.
+        """
+        super(DataEmbedding, self).__init__()
+        if embed_type == "pre":
+            self.value_embedding = nn.Identity()
+        else:
+            self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
         self.position_embedding = PositionalEmbedding(d_model=d_model)
-        self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type,
-                                                    freq=freq) if embed_type != 'timeF' else TimeFeatureEmbedding(
-            d_model=d_model, embed_type=embed_type, freq=freq)
+
+        # 只作用于 x_mark
+        self.temporal_embedding = (
+            TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
+            if embed_type != "timeF"
+            else TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
+        )  # 利用 `x_mark`
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, x, x_mark):
+    def forward(self, x: torch.FloatTensor, x_mark: torch.Tensor):
+        """
+
+        Args:
+            x (torch.FloatTensor)
+            x_mark:
+                - != timeF: 时间的各个离散组件（如月、日、星期、小时、分钟）torch.LongTensor
+                - timeF: 时间特征作为连续的数值特征
+        Returns:
+
+        """
         if x_mark is None:
             x = self.value_embedding(x) + self.position_embedding(x)
         else:
-            x = self.value_embedding(
-                x) + self.temporal_embedding(x_mark) + self.position_embedding(x)
+            x = self.value_embedding(x) + self.temporal_embedding(x_mark) + self.position_embedding(x)
         return self.dropout(x)
 
 
@@ -144,6 +177,8 @@ class DataEmbedding_inverted(nn.Module):
 
 
 class DataEmbedding_wo_pos(nn.Module):
+    """Data Embedding without positional encoding
+    use in Autoformer, TimeMixer"""
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
         super(DataEmbedding_wo_pos, self).__init__()
 

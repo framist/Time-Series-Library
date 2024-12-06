@@ -1162,7 +1162,6 @@ class EEGloaderMix(Dataset):
         print(f"{data_lable_0.shape = } {data_lable_1.shape = }")
 
         data = np.concatenate((data_lable_0, data_lable_1), axis=1)  # (8, TIME_POINTS * N)
-        # TODO Normalization
         if if_norm:
             # * Normalization
             scaler = StandardScaler()
@@ -1278,6 +1277,8 @@ class EBDSC_2nd(Dataset):
         assert args.enc_in == 5
         assert args.c_out == self.TAG_LEN
         assert flag in ["TRAIN", "VALID", "TEST"]
+        print(f'EBDSC_2nd setting:')
+        print(f'    {win_size=}, {flag=}, {if_emb=}')
         
         
         self.args = args
