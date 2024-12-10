@@ -131,28 +131,18 @@ class Exp_Sorting(Exp_Basic):
                 loss = criterion(outputs, label_y.long())
                 train_loss.append(loss.item())
 
-                if (i + 1) % 100 == 0:
-                    print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
-                    speed = (time.time() - time_now) / iter_count
-                    left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
-                    print("\tspeed: {:.4f}s/iter; left time: {:.4f}s".format(speed, left_time))
-                    iter_count = 0
-                    time_now = time.time()
-
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
                 model_optim.step()
 
-            print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
+            
             train_loss = np.average(train_loss)
             vali_loss, val_accuracy = self.vali(_, vali_loader, criterion)
             test_loss, test_accuracy = self.vali(_, test_loader, criterion)
+            left_time = (time.time() - time_now) / (epoch + 1) * (self.args.train_epochs - epoch - 1)
 
-            print(
-                "Epoch: {0}, Steps: {1} | Train Loss: {2:.3f} Vali Loss: {3:.3f} Vali Acc: {4:.3f} Test Loss: {5:.3f} Test Acc: {6:.3f}".format(
-                    epoch + 1, train_steps, train_loss, vali_loss, val_accuracy, test_loss, test_accuracy
-                )
-            )
+            print(f"E{epoch + 1} | TrL: {train_loss:.3f} VaL: {vali_loss:.3f} VaA: {val_accuracy:.3f} TeL: {test_loss:.3f} TeA: {test_accuracy:.3f}, left time: {left_time/3600:.3f}h")
+            
             recorder.add_record("train", train_loss)
             recorder.add_record("valid", vali_loss)
             recorder.add_record("test", test_loss)

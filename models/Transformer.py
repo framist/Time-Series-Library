@@ -69,6 +69,10 @@ class Model(nn.Module):
             self.act = F.gelu
             self.dropout = nn.Dropout(configs.dropout)
             self.projection = nn.Linear(configs.d_model * configs.seq_len, configs.num_class)
+        if self.task_name == 'sorting':
+            self.act = F.gelu
+            self.dropout = nn.Dropout(configs.dropout)
+            self.projection = nn.Linear(configs.d_model, configs.num_class)
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         # Embedding
@@ -107,6 +111,18 @@ class Model(nn.Module):
         output = output.reshape(output.shape[0], -1)  # (batch_size, seq_length * d_model)
         output = self.projection(output)  # (batch_size, num_classes)
         return output
+    
+    def sorting(self, x_enc):
+        # Embedding
+        enc_out = self.enc_embedding(x_enc, None)
+        enc_out, attns = self.encoder(enc_out, attn_mask=None)
+
+        # Output
+        output = self.act(enc_out)  # the output transformer encoder/decoder embeddings don't include non-linearity
+        output = self.dropout(output)
+        
+        output = self.projection(output)  # (batch_size, num_classes)
+        return output
 
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
@@ -121,4 +137,7 @@ class Model(nn.Module):
         if self.task_name == 'classification':
             dec_out = self.classification(x_enc, x_mark_enc)
             return dec_out  # [B, N]
+        if self.task_name == 'sorting':
+            dec_out = self.sorting(x_enc)
+            return dec_out
         return None
