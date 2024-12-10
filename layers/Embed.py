@@ -127,19 +127,15 @@ class DataEmbedding(nn.Module):
                 只作用于 x，无 x_mark :
                 - vpos: value_embedding + position_embedding, none time features encoding
                 - prepos: position_embedding, dataset dataloader 数据已经是嵌入向量，但仍添加位置编码      <- my new
+                    TDOO: 未实现
             freq (str, optional): _description_. Defaults to 'h'.
             dropout (float, optional): _description_. Defaults to 0.1.
             
-        TODO:
-            x1 = self.value_embedding(x)
-            x2 = self.position_embedding(x)
-            print(x1.shape, x2.shape)
-        torch.Size([64, 1024, 5, 64]) torch.Size([1, 1024, 64])
         """
+        self.embed_type = embed_type
         super(DataEmbedding, self).__init__()
         if embed_type == "prepos":
             self.value_embedding = nn.Identity()
-            raise NotImplementedError("prepos is not implemented yet.")
         else:
             self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
         self.position_embedding = PositionalEmbedding(d_model=d_model)
@@ -168,6 +164,13 @@ class DataEmbedding(nn.Module):
 
         """
         if x_mark is None:
+            if self.embed_type == "prepos":
+            # TODO: prepos 保留通道的保留，若不需要则直接相加 此为临时都通道合并的方法
+            #     x1 = self.value_embedding(x)
+            #     x2 = self.position_embedding(x)
+            #     print(x1.shape, x2.shape)
+            # torch.Size([1, 1024, 5, 64]) torch.Size([1, 1024, 64])
+                x = x.sum(dim=-2)
             x = self.value_embedding(x) + self.position_embedding(x)
         else:
             x = self.value_embedding(x) + self.temporal_embedding(x_mark) + self.position_embedding(x)

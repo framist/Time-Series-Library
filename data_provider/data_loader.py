@@ -1267,9 +1267,9 @@ class EBDSC_2nd(Dataset):
         flag=None,
     ):
         """
-
         Args:
             args (_type_): _description_
+                建议参数：args.embed == prepos 时 args.embed >= 128
             root_path 父文件夹，使用此需指定 `--root_path ./dataset/EBDSC-2nd/` 暂时弃用
             flag (_type_, optional): _description_. Defaults to None.
         """

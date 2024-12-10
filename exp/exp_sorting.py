@@ -141,7 +141,7 @@ class Exp_Sorting(Exp_Basic):
             test_loss, test_accuracy = self.vali(_, test_loader, criterion)
             left_time = (time.time() - time_now) / (epoch + 1) * (self.args.train_epochs - epoch - 1)
 
-            print(f"E{epoch + 1} | TrL: {train_loss:.3f} VaL: {vali_loss:.3f} VaA: {val_accuracy:.3f} TeL: {test_loss:.3f} TeA: {test_accuracy:.3f}, left time: {left_time/3600:.3f}h")
+            print(f"E{epoch + 1} | TrL: {train_loss:.3f} VaL: {vali_loss:.3f} VaA: {val_accuracy:.3f} TeL: {test_loss:.3f} TeA: {test_accuracy:.3f}, left time: {left_time/3600:.2f}h")
             
             recorder.add_record("train", train_loss)
             recorder.add_record("valid", vali_loss)
