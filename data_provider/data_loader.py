@@ -1314,7 +1314,7 @@ class EBDSC_2nd(Dataset):
         if not if_emb:
             return
         else:
-            # print(f'needed args: {args.d_model=}, {args.wve_mask=}, {args.wve_mask_hard=}')
+            print(f'wve_mask args: {args.d_model=}, {args.wve_mask=}, {args.wve_mask_hard=}')
             self.d_model = args.d_model
             self.hard = args.wve_mask_hard if flag == "TRAIN" else 0
             
@@ -1331,6 +1331,8 @@ class EBDSC_2nd(Dataset):
 
             if args.wve_mask == 'r':
                 self.f_mask  = lambda x: torch.rand_like(x) * 2 - 1
+            elif args.wve_mask == 'mr': # TODO 为了在后续的通道相加中不破坏其他维度，待实验
+                self.f_mask  = lambda x: torch.rand(x.shape[1]) * 2 - 1
             elif args.wve_mask == 'm':
                 self.f_mask  = lambda x: torch.mean(x, axis=0)
             elif args.wve_mask == 'c':

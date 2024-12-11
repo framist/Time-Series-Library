@@ -8,6 +8,7 @@ import os
 import time
 import warnings
 import numpy as np
+from utils.print_args import print_args
 
 warnings.filterwarnings("ignore")
 
@@ -149,7 +150,7 @@ class Exp_Sorting(Exp_Basic):
             recorder.add_record("acc", test_accuracy)
             recorder.plot_loss(self.args.des, save_fig=True)
 
-            early_stopping(-val_accuracy, self.model, path)
+            early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
@@ -184,6 +185,10 @@ class Exp_Sorting(Exp_Basic):
 
         with open(os.path.join(folder_path, file_name), "a") as f:
             f.write(f"{setting}\n")
+            
+            # f.write(f"{self.args}\n")
+            f.write(print_args(self.args))            
+                
             for flag in fs:
                 _, test_loader = self._get_data(flag)
 
@@ -210,7 +215,7 @@ class Exp_Sorting(Exp_Basic):
                     torch.argmax(probs, dim=-1).flatten().cpu().numpy()
                 )  # (total_samples,) int class index for each sample
                 trues = trues.flatten().cpu().numpy()
-                log = confusion_matrix(predictions, trues, folder_path, plot_name=setting, tag_len=self.args.c_out)
+                log = confusion_matrix(predictions, trues, folder_path, plot_name=flag, tag_len=self.args.c_out)
                 
                 print(f"{flag:<8} {log}")
                 f.write(f"{flag:<8} {log}\n")

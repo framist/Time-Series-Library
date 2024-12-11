@@ -39,7 +39,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
 
     # wve data
-    parser.add_argument('--wve_mask', type=str, default='r', help='masking function in WVE - r: randMask, m: meanMask, c: constMask')
+    parser.add_argument('--wve_mask', type=str, default='m', help='masking function in WVE - r: randMask, m: meanMask, c: constMask')
     parser.add_argument('--wve_mask_hard', type=float, default=0.8, help='hard ratio (%) for mask')
     parser.add_argument('--data_regen_epoch', type=int, default=9999, help='re-gen data epoch')
     
@@ -76,7 +76,7 @@ if __name__ == '__main__':
                         help='whether to use distilling in encoder, using this argument means not using distilling',
                         default=True) # only in Informer ?
     parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
-    # embed args defined in layers/Embed.py `DataEmbedding`
+    # TODO: embed args defined in layers/Embed.py `DataEmbedding`
     parser.add_argument('--embed', type=str, default='timeF',
                         help='time features encoding, options:[timeF, fixed, learned, vpos, prepos]')
     parser.add_argument('--activation', type=str, default='gelu', help='activation')

@@ -56,3 +56,12 @@ def print_args(args):
     p_hidden_dims_str = ', '.join(map(str, args.p_hidden_dims))
     print(f'  {"P Hidden Dims:":<20}{p_hidden_dims_str:<20}{"P Hidden Layers:":<20}{args.p_hidden_layers:<20}') 
     print()
+
+    print("\033[1m" + "WVE & EBDSC args" + "\033[0m")
+    # emb
+    print(f'  {"Embed:":<20}{args.embed:<20}')
+    # wve_mask wve_mask_hard
+    print(f'  {"WVE Mask:":<20}{args.wve_mask:<20}{"WVE Mask Hard:":<20}{args.wve_mask_hard:<20}')
+    # data_regen_epoch
+    print(f'  {"Data Regen Epoch:":<20}{args.data_regen_epoch:<20}')
+    print()

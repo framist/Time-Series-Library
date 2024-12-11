@@ -4,6 +4,15 @@ import torch.nn.functional as F
 from torch.nn.utils import weight_norm
 import math
 
+EMBED_TYPES = {
+    #  w/ time features encoding (原仓库使用)
+    'fixed': 'use FixedEmbedding',
+    'learned': 'use nn.Embedding',
+    'timeF': 'use TimeFeatureEmbedding',
+    #  w/o time features encoding
+    'vpos': 'value_embedding + position_embedding; w/o time features encoding',
+    'prepos': 'position_embedding, dataset dataloader 数据已经是嵌入向量，但仍添加位置编码; w/o time features encoding',    
+}
 
 class PositionalEmbedding(nn.Module):
     def __init__(self, d_model, max_len=5000):
@@ -127,7 +136,6 @@ class DataEmbedding(nn.Module):
                 只作用于 x，无 x_mark :
                 - vpos: value_embedding + position_embedding, none time features encoding
                 - prepos: position_embedding, dataset dataloader 数据已经是嵌入向量，但仍添加位置编码      <- my new
-                    TDOO: 未实现
             freq (str, optional): _description_. Defaults to 'h'.
             dropout (float, optional): _description_. Defaults to 0.1.
             
@@ -136,6 +144,7 @@ class DataEmbedding(nn.Module):
         super(DataEmbedding, self).__init__()
         if embed_type == "prepos":
             self.value_embedding = nn.Identity()
+            # assert args.wve_mask == 'c'
         else:
             self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
         self.position_embedding = PositionalEmbedding(d_model=d_model)
@@ -166,6 +175,8 @@ class DataEmbedding(nn.Module):
         if x_mark is None:
             if self.embed_type == "prepos":
             # TODO: prepos 保留通道的保留，若不需要则直接相加 此为临时都通道合并的方法
+            #   或是作为通道拓展
+            # 但是这样 f_mask 不能是随机掩码 
             #     x1 = self.value_embedding(x)
             #     x2 = self.position_embedding(x)
             #     print(x1.shape, x2.shape)
@@ -196,7 +207,8 @@ class DataEmbedding_inverted(nn.Module):
 
 class DataEmbedding_wo_pos(nn.Module):
     """Data Embedding without positional encoding
-    use in Autoformer, TimeMixer"""
+    use in Autoformer, TimeMixer
+    TODO"""
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
         super(DataEmbedding_wo_pos, self).__init__()
 
