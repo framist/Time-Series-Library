@@ -190,8 +190,7 @@ class Exp_Sorting(Exp_Basic):
         with open(os.path.join(folder_path, file_name), "a") as f:
             f.write(f"{setting}\n")
             
-            # f.write(f"{self.args}\n")
-            f.write(print_args(self.args))            
+            f.write(f"{self.args}\n")         
                 
             for flag in fs:
                 _, test_loader = self._get_data(flag)

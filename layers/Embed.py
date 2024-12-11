@@ -185,7 +185,10 @@ class DataEmbedding(nn.Module):
                     x = x
                     
                 if "pos" in self.embed_type:
-                    x = x + self.position_embedding(x)
+                    p: torch.FloatTensor = self.position_embedding(x)
+                    if "wve" in self.embed_type:
+                        p = p.unsqueeze(-2)
+                    x = x + p
                     
                 if "c_sum" in self.embed_type:
                     x = x.sum(dim=-2)
