@@ -6,13 +6,22 @@ import math
 
 EMBED_TYPES = {
     #  w/ time features encoding (原仓库使用)
-    'fixed': 'use FixedEmbedding',
-    'learned': 'use nn.Embedding',
-    'timeF': 'use TimeFeatureEmbedding',
-    #  w/o time features encoding
-    'vpos': 'value_embedding + position_embedding; w/o time features encoding',
-    'prepos': 'position_embedding, dataset dataloader 数据已经是嵌入向量，但仍添加位置编码; w/o time features encoding',    
+    'fixed': 'use FixedEmbedding, 兼容原仓库使用，仅单用',
+    'learned': 'use nn.Embedding, 兼容原仓库使用，仅单用',
+    'timeF': 'use TimeFeatureEmbedding, 兼容原仓库使用，仅单用',
+    #  w/o time features encoding (my new)
+    'value': 'value_embedding; w/o time features encoding',
+    'wve': 'dataloader 数据已 WVE; w/o time features encoding',    
+    'pos': '+ position_embedding; 可组合使用',
+    'c_sum': 'sum over channel as D; 可与 wve 组合使用',
+    'c_cat': 'concat over channel as D; 可与 wve 组合使用，注意前后 D 的变化',
+    'cat_as_c': 'cat wve as channel, then value_embedding; 可与 wve 组合使用，注意前后 D 的变化',    # <-
 }
+
+def embs_help() -> str:
+    # s = ' | '.join([f'{k}: {v}' for k, v in EMBED_TYPES.items()])
+    # return f"[{s}]"
+    return "[value <pos> | wve <pos> <c_sum | c_cat | cat_as_c>] | [fixed | learned | timeF]"
 
 class PositionalEmbedding(nn.Module):
     def __init__(self, d_model, max_len=5000):
@@ -122,44 +131,35 @@ class TimeFeatureEmbedding(nn.Module):
 
 
 class DataEmbedding(nn.Module):
-    def __init__(self, c_in, d_model, embed_type="timeF", freq="h", dropout=0.1):
+    def __init__(self, c_in, d_model, embed_type: list[str]=["timeF"], freq="h", dropout=0.1):
         """_summary_
 
         Args:
             c_in (_type_): _description_
             d_model (_type_): _description_
-            embed_type (str, optional):
-                只作用于 x_mark，x 使用 TokenEmbedding
-                - timeF: use TimeFeatureEmbedding
-                - fixed: use FixedEmbedding,
-                - learned: use nn.Embedding
-                只作用于 x，无 x_mark :
-                - vpos: value_embedding + position_embedding, none time features encoding
-                - prepos: position_embedding, dataset dataloader 数据已经是嵌入向量，但仍添加位置编码      <- my new
+            embed_type (list[str], optional):
+                ref: `EMBED_TYPES`
             freq (str, optional): _description_. Defaults to 'h'.
             dropout (float, optional): _description_. Defaults to 0.1.
             
         """
+        assert set(embed_type) <= set(EMBED_TYPES.keys()), f"embed_type: {embed_type} not in {EMBED_TYPES.keys()}"
         self.embed_type = embed_type
+        
         super(DataEmbedding, self).__init__()
-        if embed_type == "prepos":
-            self.value_embedding = nn.Identity()
-            # assert args.wve_mask == 'c'
-        else:
-            self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
+            
+        self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
         self.position_embedding = PositionalEmbedding(d_model=d_model)
 
         self.dropout = nn.Dropout(p=dropout)
         
-        if embed_type in ["vpos", "prepos"]:
-            return
-        
-        # 只作用于 x_mark
-        self.temporal_embedding = (
-            TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
-            if embed_type != "timeF"
-            else TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
-        )  # 利用 `x_mark`
+        if set(["fixed", "learned", "timeF"]) & set(embed_type):        
+            # 只作用于 x_mark
+            self.temporal_embedding = (
+                TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
+                if embed_type != ["timeF"]
+                else TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
+            )  # 利用 `x_mark`
 
     def forward(self, x: torch.FloatTensor, x_mark: torch.Tensor):
         """
@@ -169,20 +169,32 @@ class DataEmbedding(nn.Module):
             x_mark:
                 - != timeF: 时间的各个离散组件（如月、日、星期、小时、分钟）torch.LongTensor
                 - timeF: 时间特征作为连续的数值特征
-        Returns:
 
+            x1 = self.value_embedding(x)  B T C -> B T D
+                torch.Size([1, 1024, 64])
+            wve input       B T C D        
+                torch.Size([1, 1024, 5, 64]) 
         """
         if x_mark is None:
-            if self.embed_type == "prepos":
-            # TODO: prepos 保留通道的保留，若不需要则直接相加 此为临时都通道合并的方法
-            #   或是作为通道拓展
-            # 但是这样 f_mask 不能是随机掩码 
-            #     x1 = self.value_embedding(x)
-            #     x2 = self.position_embedding(x)
-            #     print(x1.shape, x2.shape)
-            # torch.Size([1, 1024, 5, 64]) torch.Size([1, 1024, 64])
-                x = x.sum(dim=-2)
-            x = self.value_embedding(x) + self.position_embedding(x)
+            if set(["fixed", "learned", "timeF"]) & set(self.embed_type):
+                x = self.value_embedding(x) + self.position_embedding(x)
+            else:
+                if "value" in self.embed_type:
+                    x = self.value_embedding(x)
+                elif "wve" in self.embed_type:
+                    x = x
+                    
+                if "pos" in self.embed_type:
+                    x = x + self.position_embedding(x)
+                    
+                if "c_sum" in self.embed_type:
+                    x = x.sum(dim=-2)
+                elif "c_cat" in self.embed_type:
+                    x = x.reshape(x.shape[0], x.shape[1], -1)
+                elif "cat_as_c" in self.embed_type: # [B, T, C, D] -> [B, T, C*D as C] -value_embedding-> [B, T, D]
+                    x = x.reshape(x.shape[0], x.shape[1], -1)
+                    x = self.value_embedding(x)
+                    
         else:
             x = self.value_embedding(x) + self.temporal_embedding(x_mark) + self.position_embedding(x)
         return self.dropout(x)

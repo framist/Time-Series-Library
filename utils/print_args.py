@@ -36,7 +36,7 @@ def print_args(args):
     print(f'  {"d layers:":<20}{args.d_layers:<20}{"d FF:":<20}{args.d_ff:<20}')
     print(f'  {"Moving Avg:":<20}{args.moving_avg:<20}{"Factor:":<20}{args.factor:<20}')
     print(f'  {"Distil:":<20}{args.distil:<20}{"Dropout:":<20}{args.dropout:<20}')
-    print(f'  {"Embed:":<20}{args.embed:<20}{"Activation:":<20}{args.activation:<20}')
+    print(f'  {"Embed:":<20}{str(args.embed):<20}{"Activation:":<20}{args.activation:<20}')
     print()
 
     print("\033[1m" + "Run Parameters" + "\033[0m")
@@ -59,7 +59,8 @@ def print_args(args):
 
     print("\033[1m" + "WVE & EBDSC args" + "\033[0m")
     # emb
-    print(f'  {"Embed:":<20}{args.embed:<20}')
+    print(f'  {"Embed:":<20}{str(args.embed):<20}{"Enc In:":<20}{args.enc_in:<20}')
+    print(f'  {"wve_d_model:":<20}{args.wve_d_model:<20}{"d_model:":<20}{args.d_model:<20}')
     # wve_mask wve_mask_hard
     print(f'  {"WVE Mask:":<20}{args.wve_mask:<20}{"WVE Mask Hard:":<20}{args.wve_mask_hard:<20}')
     # data_regen_epoch

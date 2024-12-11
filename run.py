@@ -8,6 +8,7 @@ from exp.exp_anomaly_detection import Exp_Anomaly_Detection
 from exp.exp_classification import Exp_Classification
 from exp.exp_sorting import Exp_Sorting
 from utils.print_args import print_args
+from layers.Embed import embs_help, EMBED_TYPES
 import random
 import numpy as np
 
@@ -17,7 +18,7 @@ if __name__ == '__main__':
     torch.manual_seed(fix_seed)
     np.random.seed(fix_seed)
 
-    parser = argparse.ArgumentParser(description='TimesNet')
+    parser = argparse.ArgumentParser(description='Time Series')
 
     # basic config
     parser.add_argument('--task_name', type=str, required=True, default='long_term_forecast',
@@ -40,9 +41,9 @@ if __name__ == '__main__':
 
     # wve data
     parser.add_argument('--wve_mask', type=str, default='m', help='masking function in WVE - r: randMask, m: meanMask, c: constMask')
-    parser.add_argument('--wve_mask_hard', type=float, default=0.8, help='hard ratio (%) for mask')
+    parser.add_argument('--wve_mask_hard', type=float, default=0.8, help='hard ratio (%%) for mask')
+    parser.add_argument('--wve_d_model', type=int, default=128, help='dimension of WVE')
     parser.add_argument('--data_regen_epoch', type=int, default=9999, help='re-gen data epoch')
-    
 
     # forecasting task
     parser.add_argument('--seq_len', type=int, default=96, help='input sequence length')
@@ -55,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--mask_rate', type=float, default=0.25, help='mask ratio')
 
     # anomaly detection task
-    parser.add_argument('--anomaly_ratio', type=float, default=0.25, help='prior anomaly ratio (%)')
+    parser.add_argument('--anomaly_ratio', type=float, default=0.25, help='prior anomaly ratio (%%)')
 
     # model define
     parser.add_argument('--expand', type=int, default=2, help='expansion factor for Mamba')
@@ -76,9 +77,9 @@ if __name__ == '__main__':
                         help='whether to use distilling in encoder, using this argument means not using distilling',
                         default=True) # only in Informer ?
     parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
-    # TODO: embed args defined in layers/Embed.py `DataEmbedding`
-    parser.add_argument('--embed', type=str, default='timeF',
-                        help='time features encoding, options:[timeF, fixed, learned, vpos, prepos]')
+    # embed args defined in layers/Embed.py
+    parser.add_argument('--embed', type=str, nargs='+', default=['timeF'], choices=EMBED_TYPES.keys(),
+                        help=f'time features encoding, can select multiple. {embs_help()}')
     parser.add_argument('--activation', type=str, default='gelu', help='activation')
     parser.add_argument('--channel_independence', type=int, default=1,
                         help='0: channel dependence 1: channel independence for FreTS model')
@@ -181,7 +182,7 @@ if __name__ == '__main__':
         names.append(f'{args.des}')
         # names.append(f'ft{args.features}')
         # names.append(f'sl{args.seq_len}')
-        names.append(f'emb_{args.embed}')
+        # names.append(f'emb_{args.embed}')
         # names.append(f'll{args.label_len}')
         # names.append(f'pl{args.pred_len}')
         names.append(f'dm{args.d_model}')

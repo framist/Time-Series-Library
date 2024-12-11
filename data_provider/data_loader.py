@@ -1269,16 +1269,15 @@ class EBDSC_2nd(Dataset):
         """
         Args:
             args (_type_): _description_
-                建议参数：args.embed == prepos 时 args.embed >= 128
+                建议参数：wve in args.embed 时 args.embed >= 128
             root_path 父文件夹，使用此需指定 `--root_path ./dataset/EBDSC-2nd/` 暂时弃用
             flag (_type_, optional): _description_. Defaults to None.
         """
-        assert args.enc_in == 5
+        # assert args.enc_in == 5
         assert args.c_out == self.TAG_LEN
         assert flag in ["TRAIN", "VALID", "TEST_MINI", "TEST_ALL", "SCENE_I", "SCENE_II", "SCENE_III"]
-        if_emb = True if args.embed == "prepos" else False
-        print(f'EBDSC_2nd setting: {win_size=}, {flag=}, {args.embed=}, {if_emb=}')
-        
+        if_emb = True if "wve" in args.embed else False
+        print(f'EBDSC_2nd setting: {win_size=}, {flag=}, {args.embed=}, {if_emb=}, {args.wve_d_model=}')        
         
         self.args = args
         self.root_path = root_path
@@ -1314,8 +1313,7 @@ class EBDSC_2nd(Dataset):
         if not if_emb:
             return
         else:
-            print(f'wve_mask args: {args.d_model=}, {args.wve_mask=}, {args.wve_mask_hard=}')
-            self.d_model = args.d_model
+            self.d_model = args.wve_d_model
             self.hard = args.wve_mask_hard if flag == "TRAIN" else 0
             
             self.d_step = 8

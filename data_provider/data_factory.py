@@ -80,7 +80,6 @@ def data_provider(args, flag):
             shuffle=shuffle_flag,
             num_workers=args.num_workers,
             drop_last=drop_last,
-            # TODO:
             # collate_fn=lambda x: collate_fn(x, max_len=args.seq_len),
             pin_memory=True
         )

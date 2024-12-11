@@ -19,7 +19,10 @@ class Exp_Sorting(Exp_Basic):
     def __init__(self, args):
         super(Exp_Sorting, self).__init__(args)
         assert args.data == "EBDSC_2nd", "only support EBDSC_2nd dataset"
-
+        if 'cat_as_c' in args.embed:
+            assert args.enc_in == 5 * args.wve_d_model
+        else:
+            assert args.enc_in == 5
     def _build_model(self):
         # 所需参数：
         # self.args.seq_len = self.args.pred_len 窗口长度
@@ -28,8 +31,9 @@ class Exp_Sorting(Exp_Basic):
         print(f"Exp_Sorting needed args: {self.args.seq_len=}, {self.args.enc_in=}, {self.args.c_out=}")
         self.args.num_class = self.args.c_out
         self.args.pred_len = 0
-        if self.args.embed == "prepos":
-            print(f'prepos args: {self.args.d_model=}, {self.args.wve_mask=}, {self.args.wve_mask_hard=}')
+        if "wve" in self.args.embed:
+            print(f'wve args: {self.args.d_model=}, {self.args.wve_d_model=} | {self.args.wve_mask=}, {self.args.wve_mask_hard=}')
+            
         
 
         # model init
