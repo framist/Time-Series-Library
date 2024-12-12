@@ -113,6 +113,9 @@ class Exp_Sorting(Exp_Basic):
 
         model_optim = self._select_optimizer()
         criterion = self._select_criterion()
+        
+        if self.args.use_amp:  
+            scaler = torch.cuda.amp.GradScaler()
 
         for epoch in range(self.args.train_epochs):
             # 重生成数据集
@@ -132,13 +135,24 @@ class Exp_Sorting(Exp_Basic):
                 batch_x: torch.Tensor = batch_x.float().to(self.device)
                 label_y: torch.Tensor = label_y.to(self.device)
 
-                outputs = self.model(batch_x, None, None, None)
-                loss = criterion(outputs, label_y.long())
+                if self.args.use_amp:
+                    with torch.cuda.amp.autocast():
+                        outputs = self.model(batch_x, None, None, None)
+                        loss = criterion(outputs, label_y.long())
+                else:
+                    outputs = self.model(batch_x, None, None, None)
+                    loss = criterion(outputs, label_y.long())
+                    
                 train_loss.append(loss.item())
-
-                loss.backward()
-                nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
-                model_optim.step()
+                
+                if self.args.use_amp:
+                    scaler.scale(loss).backward()
+                    scaler.step(model_optim)
+                    scaler.update()
+                else:
+                    loss.backward()
+                    # nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
+                    model_optim.step()
 
             
             train_loss = np.average(train_loss)
