@@ -119,7 +119,7 @@ class Exp_Sorting(Exp_Basic):
 
         for epoch in range(self.args.train_epochs):
             # 重生成数据集
-            if epoch % self.args.data_regen_epoch == 0 and epoch >= 0:
+            if epoch % self.args.data_regen_epoch == 0 and epoch > 0:
                 _, train_loader = self._get_data(flag="TRAIN")
                 _, vali_loader = self._get_data(flag="VALID")
             iter_count = 0
@@ -234,12 +234,11 @@ class Exp_Sorting(Exp_Basic):
                 trues = trues.flatten().cpu().numpy()
                 log = confusion_matrix(predictions, trues, folder_path, plot_name=flag, tag_len=self.args.c_out)
                 
-                print(f"{flag:<8} {log}")
-                f.write(f"{flag:<8} {log}\n")
+                print(f"{flag:<10} {log}")
+                f.write(f"{flag:<10} {log}\n")
                 
             f.write("\n")
             f.write("\n")
-
         return
 
 
