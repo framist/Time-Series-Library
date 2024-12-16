@@ -143,6 +143,9 @@ if __name__ == '__main__':
     # TimeXer
     parser.add_argument('--patch_len', type=int, default=16, help='patch length')
 
+    # DLinear - individual
+    parser.add_argument('--dlinear_individual', default=False, action="store_true", help='whether shared model among different variates in DLinear')    
+    
     args = parser.parse_args()
     # args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
     args.use_gpu = True if torch.cuda.is_available() else False

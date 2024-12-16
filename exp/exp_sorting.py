@@ -34,8 +34,6 @@ class Exp_Sorting(Exp_Basic):
         if "wve" in self.args.embed:
             print(f'wve args: {self.args.d_model=}, {self.args.wve_d_model=} | {self.args.wve_mask=}, {self.args.wve_mask_hard=}')
             
-        
-
         # model init
         model = self.model_dict[self.args.model].Model(self.args).float()
         if self.args.use_multi_gpu and self.args.use_gpu:

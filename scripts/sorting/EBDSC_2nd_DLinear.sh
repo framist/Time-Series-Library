@@ -17,8 +17,8 @@ python -u run.py \
   --enc_in 5 \
   --seq_len 1024 \
   --c_out 12 \
-  --c_out 12 \
   --model $model_name \
+  --dlinear_individual \
   --e_layers 2 \
   --batch_size 16 \
   --d_ff 512 \
