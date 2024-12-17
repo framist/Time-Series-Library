@@ -103,6 +103,10 @@ class Model(nn.Module):
             self.act = F.gelu
             self.dropout = nn.Dropout(configs.dropout)
             self.projection = nn.Linear(configs.d_model * configs.seq_len, configs.num_class)
+        if self.task_name == 'sorting':
+            self.act = F.gelu
+            self.dropout = nn.Dropout(configs.dropout)
+            self.projection = nn.Linear(configs.d_model, configs.num_class)
 
         self.tau_learner = Projector(enc_in=configs.enc_in, seq_len=configs.seq_len, hidden_dims=configs.p_hidden_dims,
                                      hidden_layers=configs.p_hidden_layers, output_dim=1)
@@ -202,6 +206,30 @@ class Model(nn.Module):
         output = self.projection(output)
         return output
 
+    def sorting(self, x_enc):
+        x_raw = x_enc.clone().detach()
+
+        # Normalization
+        mean_enc = x_enc.mean(1, keepdim=True).detach()  # B x 1 x E
+        std_enc = torch.sqrt(
+            torch.var(x_enc - mean_enc, dim=1, keepdim=True, unbiased=False) + 1e-5).detach()  # B x 1 x E
+        # B x S x E, B x 1 x E -> B x 1, positive scalar
+        tau = self.tau_learner(x_raw, std_enc).exp()
+        # B x S x E, B x 1 x E -> B x S
+        delta = self.delta_learner(x_raw, mean_enc)
+        # embedding
+        enc_out = self.enc_embedding(x_enc, None)
+        enc_out, attns = self.encoder(enc_out, attn_mask=None, tau=tau, delta=delta)
+
+        # Output
+        output = self.act(enc_out)  # the output transformer encoder/decoder embeddings don't include non-linearity
+        output = self.dropout(output)
+        
+        # (batch_size, seq_length, d_model) -> (batch_size, seq_length, num_classes)
+        output = self.projection(output)
+        return output
+        
+        
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
             dec_out = self.forecast(x_enc, x_mark_enc, x_dec, x_mark_dec)
@@ -215,4 +243,7 @@ class Model(nn.Module):
         if self.task_name == 'classification':
             dec_out = self.classification(x_enc, x_mark_enc)
             return dec_out  # [B, L, D]
+        if self.task_name == 'sorting':
+            dec_out = self.sorting(x_enc)
+            return dec_out
         return None
