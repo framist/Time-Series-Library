@@ -48,13 +48,16 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.task_name = configs.task_name
         self.seq_len = configs.seq_len
-        if self.task_name == 'classification' or self.task_name == 'anomaly_detection' or self.task_name == 'imputation':
+        if self.task_name == 'classification' or self.task_name == 'anomaly_detection' or self.task_name == 'imputation' or self.task_name == 'sorting':
             self.pred_len = configs.seq_len
         else:
             self.pred_len = configs.pred_len
 
         if configs.task_name == 'long_term_forecast' or configs.task_name == 'short_term_forecast':
             self.chunk_size = min(configs.pred_len, configs.seq_len, chunk_size)
+        elif configs.task_name == 'sorting':
+            chunk_size = 32 # TODO
+            self.chunk_size = min(configs.seq_len, chunk_size)
         else:
             self.chunk_size = min(configs.seq_len, chunk_size)
         # assert (self.seq_len % self.chunk_size == 0)
@@ -69,6 +72,9 @@ class Model(nn.Module):
             self.act = F.gelu
             self.dropout = nn.Dropout(configs.dropout)
             self.projection = nn.Linear(configs.enc_in * configs.seq_len, configs.num_class)
+        elif self.task_name == 'sorting':
+            self.projection = nn.Linear(configs.enc_in, configs.num_class)
+            
         self._build()
 
     def _build(self):
@@ -99,7 +105,7 @@ class Model(nn.Module):
 
         self.ar = nn.Linear(self.seq_len, self.pred_len)
 
-    def encoder(self, x):
+    def encoder(self, x: torch.Tensor):
         B, T, N = x.size()
 
         highway = self.ar(x.permute(0, 2, 1))
@@ -149,6 +155,14 @@ class Model(nn.Module):
         output = self.projection(output)  # (batch_size, num_classes)
         return output
 
+    def sorting(self, x_enc):
+        enc_out = self.encoder(x_enc)
+
+        # (batch_size, seq_length, d_model) -> (batch_size, seq_length, num_classes)
+        output = self.projection(enc_out)
+        
+        return output
+        
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
             dec_out = self.forecast(x_enc, x_mark_enc, x_dec, x_mark_dec)
@@ -162,4 +176,7 @@ class Model(nn.Module):
         if self.task_name == 'classification':
             dec_out = self.classification(x_enc, x_mark_enc)
             return dec_out  # [B, N]
+        if self.task_name == 'sorting':
+            dec_out = self.sorting(x_enc)
+            return dec_out
         return None

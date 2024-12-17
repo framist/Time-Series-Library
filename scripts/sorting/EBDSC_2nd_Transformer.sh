@@ -8,7 +8,7 @@ python -u run.py \
   --root_path ./dataset/EBDSC-2nd/ \
   --model_id EBDSC_2nd \
   --data EBDSC_2nd \
-  --data_regen_epoch 10 \
+  --data_regen_epoch 2 \
   --des 'wve_cat_as_c' \
   --embed wve cat_as_c \
   --wve_d_model 128 \
@@ -33,7 +33,7 @@ python -u run.py \
   --root_path ./dataset/EBDSC-2nd/ \
   --model_id EBDSC_2nd \
   --data EBDSC_2nd \
-  --data_regen_epoch 10 \
+  --data_regen_epoch 2 \
   --des 'value' \
   --embed value \
   --wve_d_model 128 \
