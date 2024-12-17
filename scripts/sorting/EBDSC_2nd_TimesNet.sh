@@ -1,5 +1,7 @@
 export CUDA_VISIBLE_DEVICES=0
 
+# in the case of TimesNet, use_amp should be False
+
 model_name=TimesNet
 
 python -u run.py \
@@ -24,8 +26,7 @@ python -u run.py \
   --itr 1 \
   --learning_rate 0.001 \
   --train_epochs 400 \
-  --patience 100 \
-  --use_amp
+  --patience 100
 
 python -u run.py \
   --task_name sorting \
@@ -49,5 +50,4 @@ python -u run.py \
   --itr 1 \
   --learning_rate 0.001 \
   --train_epochs 400 \
-  --patience 100 \
-  --use_amp
+  --patience 100
