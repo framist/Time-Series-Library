@@ -40,11 +40,14 @@ if __name__ == '__main__':
                         help='freq for time features encoding, options:[s:secondly, t:minutely, h:hourly, d:daily, b:business days, w:weekly, m:monthly], you can also use more detailed freq like 15min or 3h')
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
 
-    # wve data
+    # * wve data
     parser.add_argument('--wve_mask', type=str, default='m', help='masking function in WVE - r: randMask, m: meanMask, c: constMask')
     parser.add_argument('--wve_mask_hard', type=float, default=0.8, help='hard ratio (%%) for mask')
     parser.add_argument('--wve_d_model', type=int, default=128, help='dimension of WVE')
     parser.add_argument('--data_regen_epoch', type=int, default=9999, help='re-gen data epoch')
+    
+    # * extra Emb
+    parser.add_argument('--extra_emb', default=False, action="store_true", help='Use extra embedding layer. support DLinear. 仅针对没有原始 Emb 的模型，增加额外 emb 层作为通道输入')
 
     # forecasting task
     parser.add_argument('--seq_len', type=int, default=96, help='input sequence length')
@@ -145,7 +148,7 @@ if __name__ == '__main__':
     # TimeXer
     parser.add_argument('--patch_len', type=int, default=16, help='patch length')
 
-    # DLinear - individual
+    # * DLinear - individual
     parser.add_argument('--dlinear_individual', default=False, action="store_true", help='whether shared model among different variates in DLinear')    
     
     args = parser.parse_args()
@@ -193,6 +196,7 @@ if __name__ == '__main__':
         # names.append(f'{args.model_id}')
         names.append(f'{args.model}')
         names.append(f'{args.data}')
+        names.append(f'regen{args.data_regen_epoch}')
         names.append(f'{args.des}')
         # names.append(f'ft{args.features}')
         # names.append(f'sl{args.seq_len}')

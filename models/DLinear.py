@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from layers.Embed import DataEmbedding
 from layers.Autoformer_EncDec import series_decomp
 
 
@@ -23,8 +24,16 @@ class Model(nn.Module):
         # Series decomposition block from Autoformer
         self.decompsition = series_decomp(configs.moving_avg)
         self.individual = configs.dlinear_individual
-        self.channels = configs.enc_in
 
+        # * extra_emb
+        if configs.extra_emb:
+            self.enc_embedding = DataEmbedding(configs.enc_in, configs.d_model, configs.embed, configs.freq,
+                                           configs.dropout)
+            self.channels = configs.d_model
+        else:
+            self.enc_embedding = nn.Identity()
+            self.channels = configs.enc_in
+        
         if self.individual:
             self.Linear_Seasonal = nn.ModuleList()
             self.Linear_Trend = nn.ModuleList()
@@ -50,9 +59,9 @@ class Model(nn.Module):
 
         if self.task_name == 'classification':
             self.projection = nn.Linear(
-                configs.enc_in * configs.seq_len, configs.num_class)
+                self.channels * configs.seq_len, configs.num_class)
         if self.task_name == 'sorting':
-            self.projection = nn.Linear(configs.enc_in, configs.num_class)
+            self.projection = nn.Linear(self.channels, configs.num_class)
 
     def encoder(self, x):
         seasonal_init, trend_init = self.decompsition(x)
@@ -97,6 +106,8 @@ class Model(nn.Module):
         return output
     
     def sorting(self, x_enc):
+        # * extra_emb
+        x_enc = self.enc_embedding(x_enc, None)
         # Encoder
         enc_out = self.encoder(x_enc)
         # (batch_size, seq_length, d_model) -> (batch_size, seq_length, num_classes)

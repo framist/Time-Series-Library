@@ -32,7 +32,7 @@ class Exp_Sorting(Exp_Basic):
         self.args.num_class = self.args.c_out
         self.args.pred_len = 0
         if "wve" in self.args.embed:
-            print(f'wve args: {self.args.d_model=}, {self.args.wve_d_model=} | {self.args.wve_mask=}, {self.args.wve_mask_hard=}')
+            print(f'wve args: {self.args.d_model=}, {self.args.wve_d_model=} | {self.args.wve_mask=}, {self.args.wve_mask_hard=} | re-gen epoch: {self.args.data_regen_epoch}')
             
         # model init
         model = self.model_dict[self.args.model].Model(self.args).float()
