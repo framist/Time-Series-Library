@@ -218,7 +218,7 @@ class Model(nn.Module):
         # B x S x E, B x 1 x E -> B x S
         delta = self.delta_learner(x_raw, mean_enc)
         # embedding
-        enc_out = self.enc_embedding(x_enc, None)
+        enc_out = self.enc_embedding(x_enc, None)   # TODO
         enc_out, attns = self.encoder(enc_out, attn_mask=None, tau=tau, delta=delta)
 
         # Output
