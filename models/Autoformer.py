@@ -84,6 +84,12 @@ class Model(nn.Module):
             self.dropout = nn.Dropout(configs.dropout)
             self.projection = nn.Linear(
                 configs.d_model * configs.seq_len, configs.num_class)
+        if self.task_name == 'sorting':
+            self.act = F.gelu
+            self.dropout = nn.Dropout(configs.dropout)
+            self.projection = nn.Linear(
+                configs.d_model, configs.c_out, bias=True)
+            
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         # decomp init
@@ -139,6 +145,14 @@ class Model(nn.Module):
         output = output.reshape(output.shape[0], -1)
         output = self.projection(output)  # (batch_size, num_classes)
         return output
+    
+    def sorting(self, x_enc):
+        # enc
+        enc_out = self.enc_embedding(x_enc, None)
+        enc_out, attns = self.encoder(enc_out, attn_mask=None)
+        # final
+        dec_out = self.projection(enc_out)
+        return dec_out
 
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
@@ -154,4 +168,7 @@ class Model(nn.Module):
         if self.task_name == 'classification':
             dec_out = self.classification(x_enc, x_mark_enc)
             return dec_out  # [B, N]
+        if self.task_name == 'sorting':
+            dec_out = self.sorting(x_enc)
+            return dec_out
         return None

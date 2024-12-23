@@ -25,6 +25,6 @@ python -u run.py \
   --batch_size 512 \
   --d_ff 256 \
   --itr 1 \
-  --learning_rate 0.0005 \
+  --learning_rate 0.002 \
   --train_epochs 400 \
   --patience 100

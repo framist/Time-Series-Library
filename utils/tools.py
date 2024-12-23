@@ -33,6 +33,7 @@ class EarlyStopping:
         self.counter = 0
         self.best_score = None
         self.early_stop = False
+        self.nan_stop = False
         self.val_loss_min = np.inf
         self.delta = delta
 
@@ -46,7 +47,7 @@ class EarlyStopping:
             if self.counter >= self.patience:
                 self.early_stop = True
         elif math.isnan(score):
-            self.early_stop = True            
+            self.nan_stop = True            
         else:
             self.best_score = score
             self.save_checkpoint(val_loss, model, path)

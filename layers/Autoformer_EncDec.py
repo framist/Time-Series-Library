@@ -18,24 +18,64 @@ class my_Layernorm(nn.Module):
         return x_hat - bias
 
 
+# class moving_avg(nn.Module):
+#     """
+#     Moving average block to highlight the trend of time series
+#     """
+
+#     def __init__(self, kernel_size, stride):
+#         super(moving_avg, self).__init__()
+#         self.kernel_size = kernel_size
+#         self.avg = nn.AvgPool1d(kernel_size=kernel_size, stride=stride, padding=0)
+
+#     def forward(self, x):
+#         """TODO self.kernel_size 必须妥善选择"""
+#         # padding on the both ends of time series
+#         front = x[:, 0:1, :].repeat(1, (self.kernel_size - 1) // 2, 1)
+#         end = x[:, -1:, :].repeat(1, (self.kernel_size - 1) // 2, 1)
+#         x = torch.cat([front, x, end], dim=1)
+#         x = self.avg(x.permute(0, 2, 1))
+#         x = x.permute(0, 2, 1)
+#         return x
+
 class moving_avg(nn.Module):
     """
     Moving average block to highlight the trend of time series
+    TODO 检查修改是否正确
     """
-
+    
     def __init__(self, kernel_size, stride):
         super(moving_avg, self).__init__()
         self.kernel_size = kernel_size
         self.avg = nn.AvgPool1d(kernel_size=kernel_size, stride=stride, padding=0)
-
+    
     def forward(self, x):
-        # padding on the both ends of time series
-        front = x[:, 0:1, :].repeat(1, (self.kernel_size - 1) // 2, 1)
-        end = x[:, -1:, :].repeat(1, (self.kernel_size - 1) // 2, 1)
-        x = torch.cat([front, x, end], dim=1)
-        x = self.avg(x.permute(0, 2, 1))
-        x = x.permute(0, 2, 1)
-        return x
+        """
+        Args:
+            x: Tensor of shape (batch_size, sequence_length, features)
+        
+        Returns:
+            Tensor of shape (batch_size, sequence_length, features) after applying moving average
+        """
+        # Calculate padding sizes
+        if self.kernel_size % 2 == 1:
+            pad_front = pad_end = (self.kernel_size - 1) // 2
+        else:
+            pad_front = self.kernel_size // 2
+            pad_end = self.kernel_size // 2 - 1
+        
+        # Pad the sequence
+        front = x[:, 0:1, :].repeat(1, pad_front, 1)
+        end = x[:, -1:, :].repeat(1, pad_end, 1)
+        x_padded = torch.cat([front, x, end], dim=1)
+        
+        # Apply average pooling
+        # Permute to (batch_size, features, sequence_length) for AvgPool1d
+        x_padded = x_padded.permute(0, 2, 1)
+        x_avg = self.avg(x_padded)
+        x_avg = x_avg.permute(0, 2, 1)
+        
+        return x_avg
 
 
 class series_decomp(nn.Module):

@@ -170,6 +170,9 @@ class Exp_Sorting(Exp_Basic):
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
+            if early_stopping.nan_stop:
+                print("!!! Nan stopping !!!")
+                break
 
         recorder.save_records()
         best_model_path = path + "/" + "checkpoint.pth"
