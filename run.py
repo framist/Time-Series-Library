@@ -191,6 +191,7 @@ if __name__ == '__main__':
         raise ValueError(f'Invalid task name: {args.task_name}')
 
     def named_setting(args, ii: int):
+        """NOTE exp may change args"""
         names = []
         names.append(f'{args.task_name}')
         # names.append(f'{args.model_id}')
@@ -213,6 +214,8 @@ if __name__ == '__main__':
         # names.append(f'fc{args.factor}')
         # names.append(f'eb{args.embed}')
         # names.append(f'dt{args.distil}')
+        names.append(f'bs{args.batch_size}')
+        names.append(f'ma{args.moving_avg}')
         names.append(f'{ii}')
         return '_'.join(names)
     
@@ -227,6 +230,9 @@ if __name__ == '__main__':
 
             print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
             exp.test(setting)
+            
+            print('>>>>>>>{} end ⬛'.format(setting))
+            
             if args.gpu_type == 'mps':
                 torch.backends.mps.empty_cache()
             elif args.gpu_type == 'cuda':
@@ -238,7 +244,11 @@ if __name__ == '__main__':
 
         print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
         exp.test(setting, test=1)
+        
+        print('>>>>>>>{} end ⬛'.format(setting))
+        
         if args.gpu_type == 'mps':
             torch.backends.mps.empty_cache()
         elif args.gpu_type == 'cuda':
             torch.cuda.empty_cache()
+    
