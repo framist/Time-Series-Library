@@ -47,9 +47,21 @@ class Model(nn.Module):
             self.dropout = nn.Dropout(configs.dropout)
             self.projection = nn.Linear(configs.d_model * configs.enc_in, configs.num_class)
         if self.task_name == 'sorting':
+            self.num_class = configs.num_class
+            # # Note 以下方式可能不如密集连接
+            # self.projection_1 = nn.Sequential(
+            #     nn.GELU(), # the output transformer encoder/decoder embeddings don't include non-linearity
+            #     nn.Dropout(configs.dropout),
+            #     nn.Linear(configs.d_model, configs.seq_len)
+            # )
+            # self.projection_2 = nn.Sequential(
+            #     nn.GELU(),
+            #     nn.Dropout(configs.dropout),
+            #     nn.Linear(configs.enc_in, configs.num_class)
+            # )
             self.act = F.gelu
             self.dropout = nn.Dropout(configs.dropout)
-            self.projection = nn.Linear(configs.d_model, configs.num_class)
+            self.projection = nn.Linear(configs.d_model * configs.enc_in, configs.num_class * configs.seq_len)
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         # Normalization from Non-stationary Transformer
@@ -121,6 +133,8 @@ class Model(nn.Module):
         return output
     
     def sorting(self, x_enc):
+        B, L, N = x_enc.shape
+        # print(f'{x_enc.shape=}')
         # Embedding
         enc_out = self.enc_embedding(x_enc, None)
         enc_out, attns = self.encoder(enc_out, attn_mask=None)
@@ -128,8 +142,11 @@ class Model(nn.Module):
         # Output
         output = self.act(enc_out)  # the output transformer encoder/decoder embeddings don't include non-linearity
         output = self.dropout(output)
+        output = output.reshape(B, -1)  # (batch_size, c_in * d_model)
         output = self.projection(output)  # (batch_size, num_classes)
+        output = output.reshape(B, L, self.num_class)
         return output
+
 
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
