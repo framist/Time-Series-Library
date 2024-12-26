@@ -41,7 +41,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
 
     # * wve data
-    parser.add_argument('--wve_mask', type=str, default='m', help='masking function in WVE - r: randMask, m: meanMask, c: constMask')
+    parser.add_argument('--wve_mask', type=str, default='m', help='masking function in WVE - r: randMask, m: meanMask, c: constMask, mr: todo...')
     parser.add_argument('--wve_mask_hard', type=float, default=0.8, help='hard ratio (%%) for mask')
     parser.add_argument('--wve_d_model', type=int, default=128, help='dimension of WVE')
     parser.add_argument('--data_regen_epoch', type=int, default=9999, help='re-gen data epoch')
@@ -199,6 +199,7 @@ if __name__ == '__main__':
         names.append(f'{args.data}')
         names.append(f'{args.des}')
         names.append(f'rg{args.data_regen_epoch}')
+        names.append(f'wm{args.wve_mask}')
         # names.append(f'ft{args.features}')
         # names.append(f'sl{args.seq_len}')
         # names.append(f'emb_{args.embed}')
