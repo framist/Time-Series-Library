@@ -11,9 +11,8 @@ import random
 
 
 TAG_LEN = 12
-WINDOW_SIZE = 1024
 DROP_SIG_RATIO = 0.99
-DATA_NAME = f'PosAll'
+DATA_NAME = f"PosAll"
 
 
 def read_txt(filepath):
@@ -22,7 +21,7 @@ def read_txt(filepath):
     """
     # columns = ["TOA", "频率", "脉宽", "幅值", "到达角", "标签"]
     columns = ["TOA", "RF", "PW", "PA", "DOA", "TAG"]
-    df = pd.read_csv(filepath, sep='\s+', names=columns)
+    df = pd.read_csv(filepath, sep="\s+", names=columns)
     # 数据类型规范
     df["TOA"] = df["TOA"].astype(np.float32)
     df["RF"] = df["RF"].astype(np.float32)
@@ -42,7 +41,9 @@ def read_train_data(file_index):
 def read_test_data(file_index):
     return read_txt(f"dataset/EBDSC-2nd/验证数据集/验证集{file_index+1}.txt")
 
+
 from functools import lru_cache
+
 
 @lru_cache(maxsize=1)
 def read_dfs() -> Tuple[List[pd.DataFrame], List[pd.DataFrame]]:
@@ -51,13 +52,9 @@ def read_dfs() -> Tuple[List[pd.DataFrame], List[pd.DataFrame]]:
     Returns:
         tuple[List[pd.DataFrame], List[pd.DataFrame]]: _description_
     """
-    print("并行读取数据集中...", end=' ')
-    df_list: List[pd.DataFrame] = Parallel(n_jobs=-1)(
-        delayed(read_train_data)(i) for i in range(TAG_LEN)
-    )
-    test_df_list: List[pd.DataFrame] = Parallel(n_jobs=-1)(
-        delayed(read_test_data)(i) for i in range(3)
-    )
+    print("并行读取数据集中...", end=" ")
+    df_list: List[pd.DataFrame] = Parallel(n_jobs=-1)(delayed(read_train_data)(i) for i in range(TAG_LEN))
+    test_df_list: List[pd.DataFrame] = Parallel(n_jobs=-1)(delayed(read_test_data)(i) for i in range(3))
     print("读取数据集 end")
     return df_list, test_df_list
 
@@ -89,8 +86,7 @@ def pre_reshape(df: pd.DataFrame, sample_ratio: float = None) -> pd.DataFrame:
     # 随机截取其中 TOA 5s 窗口长的数据
     cut_len = 5
     start = np.random.uniform(df["TOA"].min(), df["TOA"].max())
-    df_scaled: pd.DataFrame = df[(df["TOA"] >= start) & (
-        df["TOA"] <= start + cut_len)].copy()
+    df_scaled: pd.DataFrame = df[(df["TOA"] >= start) & (df["TOA"] <= start + cut_len)].copy()
 
     # 随机信号丢失
     if sample_ratio is None:
@@ -111,9 +107,9 @@ def pre_reshape(df: pd.DataFrame, sample_ratio: float = None) -> pd.DataFrame:
     return df_scaled
 
 
-def to_dict(df: pd.DataFrame, reshap=False, noise=1., noise_snr=np.inf, if_pri=False):
+def to_dict(df: pd.DataFrame, reshap=False, noise=1.0, noise_snr=np.inf, if_pri=False):
     """数据转换为字典索引
-    - 除以的超参数意义为「数字化单位」    
+    - 除以的超参数意义为「数字化单位」
     reshap 需要有真实的 "TAG" 列
     noise_snr 需要有真实的 "TAG" 列 增加高斯噪声
     """
@@ -121,13 +117,13 @@ def to_dict(df: pd.DataFrame, reshap=False, noise=1., noise_snr=np.inf, if_pri=F
     def normalize(d: pd.Series) -> pd.Series:
         """标准化"""
         return (d - d.mean()) / d.std()
-    
+
     def add_noise(signal: pd.Series, snr: float):
         # 计算信号功率
         signal_power = signal.std() ** 2
 
         # 计算噪声功率
-        noise_power = signal_power / (10**(snr/10))
+        noise_power = signal_power / (10 ** (snr / 10))
 
         # 生成具有该功率的高斯噪声
         noise = np.random.normal(0, np.sqrt(noise_power), len(signal))
@@ -147,23 +143,25 @@ def to_dict(df: pd.DataFrame, reshap=False, noise=1., noise_snr=np.inf, if_pri=F
     if reshap:
         for i in range(TAG_LEN):  # 需要有真实的 "TAG" 列
             # RF 变换 (0.2, 2) 的缩放倍率参考 3 个测试集最大值
-            di = df[df["TAG"] == i+1]["RF"]
-            df.loc[df["TAG"] == i+1, "RF"] = np.random.uniform(0.2, 2) * noise * (di - di.mean()) + di.mean() + \
-                np.random.uniform(0, 100) * noise            
+            di = df[df["TAG"] == i + 1]["RF"]
+            df.loc[df["TAG"] == i + 1, "RF"] = (
+                np.random.uniform(0.2, 2) * noise * (di - di.mean()) + di.mean() + np.random.uniform(0, 100) * noise
+            )
 
             # PW 变换 (0.5, 2) 的缩放倍率参考 3 个测试集最大值
-            di = df[df["TAG"] == i+1]["PW"]
-            df.loc[df["TAG"] == i+1, "PW"] = np.random.uniform(0.5, 2) * noise * (di - di.mean()) + di.mean() + \
-                np.random.uniform(0, 10) * noise
-                
+            di = df[df["TAG"] == i + 1]["PW"]
+            df.loc[df["TAG"] == i + 1, "PW"] = (
+                np.random.uniform(0.5, 2) * noise * (di - di.mean()) + di.mean() + np.random.uniform(0, 10) * noise
+            )
+
             # DOA 变换
-            df.loc[df["TAG"] == i+1, "DOA"] += np.random.uniform(0, 90) * noise
-            
+            df.loc[df["TAG"] == i + 1, "DOA"] += np.random.uniform(0, 90) * noise
+
             # 额外高斯噪声 不需要 reshap == True
             if noise_snr < np.inf:
                 for tag in ["RF", "PW", "PA", "DOA"]:
-                    di = df[df["TAG"] == i+1][tag]
-                    df.loc[df["TAG"] == i+1, tag] = add_noise(di, noise_snr)
+                    di = df[df["TAG"] == i + 1][tag]
+                    df.loc[df["TAG"] == i + 1, tag] = add_noise(di, noise_snr)
 
         # 整体偏移 需要
         df["RF"] += np.random.uniform(-1000, 1000) * noise
@@ -176,9 +174,9 @@ def to_dict(df: pd.DataFrame, reshap=False, noise=1., noise_snr=np.inf, if_pri=F
     if noise_snr < np.inf:
         for i in range(TAG_LEN):  # 需要有真实的 "TAG" 列
             for tag in ["RF", "PW", "PA", "DOA"]:
-                di = df[df["TAG"] == i+1][tag]
-                df.loc[df["TAG"] == i+1, tag] = add_noise(di, noise_snr)
-                    
+                di = df[df["TAG"] == i + 1][tag]
+                df.loc[df["TAG"] == i + 1, tag] = add_noise(di, noise_snr)
+
     # * TOA or PRI
     if if_pri:
         d_2["PRI"] = df["TOA"].diff().fillna(0) * 5e5
@@ -186,16 +184,16 @@ def to_dict(df: pd.DataFrame, reshap=False, noise=1., noise_snr=np.inf, if_pri=F
         d_2["TOA"] = (df["TOA"] - df["TOA"].min()) * 5e5
 
     # * RF
-    d_2["RF"] = (df["RF"])
+    d_2["RF"] = df["RF"]
 
     # * PW
     d_2["PW"] = (df["PW"]) * 10
 
     # * PA < 0
-    d_2["PA"] = (df["PA"])
+    d_2["PA"] = df["PA"]
 
     # * DOA
-    d_2["DOA"] = (df["TOA"])
+    d_2["DOA"] = df["TOA"]
 
     # * TAG
     d_tag["TAG"] = df["TAG"].astype(np.int32)
@@ -207,11 +205,19 @@ def split_label(df: pd.DataFrame) -> List[pd.DataFrame]:
     """分离混杂的 TAG 数据"""
     df_list = []
     for i in range(TAG_LEN):
-        df_list.append(df[df["TAG"] == i+1].copy().reset_index(drop=True))
+        df_list.append(df[df["TAG"] == i + 1].copy().reset_index(drop=True))
     return df_list
 
 
-def _gen_mix_job(df_list: List[pd.DataFrame], size_2, if_time_reshap=False, test_df_split_list: List[List[pd.DataFrame]] = None, t=None, sample_ratio: float = None):
+def _gen_mix_job(
+    df_list: List[pd.DataFrame],
+    size_2,
+    window_size: int,
+    if_time_reshap=False,
+    test_df_split_list: List[List[pd.DataFrame]] = None,
+    t=None,
+    sample_ratio: float = None,
+):
     """生成混合窗口
 
     Args:
@@ -230,33 +236,33 @@ def _gen_mix_job(df_list: List[pd.DataFrame], size_2, if_time_reshap=False, test
         df_list_new = []
         # 对于每一个 t 随机选择
         for i in t:
-            d = random.sample(
-                [j for j in [k[i] for k in test_df_split_list] if j.shape[0] > 0] + [df_list[i]], 1)
+            d = random.sample([j for j in [k[i] for k in test_df_split_list] if j.shape[0] > 0] + [df_list[i]], 1)
             df_list_new.extend(d)
     else:
         df_list_new = df_list
 
     if if_time_reshap:
-        df = pd.concat([pre_reshape(df_list_new[i], sample_ratio)
-                       for i in t], ignore_index=True)
+        df = pd.concat([pre_reshape(df_list_new[i], sample_ratio) for i in t], ignore_index=True)
     else:
         df = pd.concat([df_list_new[i] for i in t], ignore_index=True)
     df = df.sort_values(by="TOA", ascending=True, ignore_index=True)
 
     mixed_windows = []
     for _ in range(size_2):
-        start = random.randint(0, len(df) - WINDOW_SIZE)
-        m2, m3 = to_dict(df[start:start + WINDOW_SIZE], reshap=True)
+        start = random.randint(0, len(df) - window_size)
+        m2, m3 = to_dict(df[start : start + window_size], reshap=True)
         mixed_windows.append([m2, m3])
     return mixed_windows
 
 
-def mix_data_gen(df_list: List[pd.DataFrame], size_1: int, size_2: int, n_jobs: int = -1, if_time_reshap=False, test_df_split_list=None, t=None, sample_ratio: float = None):
+def mix_data_gen(
+    df_list: List[pd.DataFrame], size_1: int, size_2: int, window_size: int, n_jobs: int = -1, **kwargs
+) -> List:
     mix_windows = []
 
     # 并行生成混合窗口
     mixed_results = Parallel(n_jobs=n_jobs)(
-        delayed(_gen_mix_job)(df_list, size_2, if_time_reshap, test_df_split_list, t, sample_ratio) for _ in range(size_1)
+        delayed(_gen_mix_job)(df_list, size_2, window_size, **kwargs) for _ in range(size_1)
     )
 
     for result in mixed_results:
@@ -265,25 +271,23 @@ def mix_data_gen(df_list: List[pd.DataFrame], size_1: int, size_2: int, n_jobs: 
     return mix_windows
 
 
-def _target_domain_job(df: pd.DataFrame, size_2, **kwargs):
+def _target_domain_job(df: pd.DataFrame, size_2: int, window_size: int, **kwargs):
     mixed_windows = []
     for _ in range(size_2):
-        start = random.randint(0, len(df) - WINDOW_SIZE)
-        m2, m3 = to_dict(df[start:start + WINDOW_SIZE], reshap=False, **kwargs)
+        start = random.randint(0, len(df) - window_size)
+        m2, m3 = to_dict(df[start : start + window_size], reshap=False, **kwargs)
         mixed_windows.append([m2, m3])
     return mixed_windows
 
 
-def target_domain_data_gen(df: pd.DataFrame, size_1: int, size_2: int, n_jobs: int = -1,**kwargs) -> List:
+def target_domain_data_gen(df: pd.DataFrame, size_1: int, size_2: int, n_jobs: int = -1, **kwargs) -> List:
     """此时 to_dict 的 reshap: bool = False
     size_1 与 size_2 意义无区别，乘积为生成的数据量
     """
     mix_windows = []
 
     # 并行生成混合窗口
-    mixed_results = Parallel(n_jobs=n_jobs)(
-        delayed(_target_domain_job)(df, size_2, **kwargs) for _ in range(size_1)
-    )
+    mixed_results = Parallel(n_jobs=n_jobs)(delayed(_target_domain_job)(df, size_2, **kwargs) for _ in range(size_1))
 
     for result in mixed_results:
         mix_windows.extend(result)

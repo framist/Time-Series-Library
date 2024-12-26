@@ -1286,13 +1286,13 @@ class EBDSC_2nd(Dataset):
         df_list, test_df_list = read_dfs()
 
         if flag == "TRAIN":
-            d_train = mix_data_gen(df_list, 100, 100, 25, True)
+            d_train = mix_data_gen(df_list, 100, 100, window_size=win_size, if_time_reshap=True)
             self.inputs, self.targets = self.make_data(d_train)
         elif flag == "VALID":
-            d_valid = mix_data_gen(df_list, 20, 50, 20, True)
+            d_valid = mix_data_gen(df_list, 20, 50, window_size=win_size, if_time_reshap=True)
             self.inputs, self.targets = self.make_data(d_valid)
         elif flag == "TEST_MINI":
-            self.inputs, self.targets = self.make_data(target_domain_data_gen(test_df_list[2], 20, 50))
+            self.inputs, self.targets = self.make_data(target_domain_data_gen(test_df_list[2], 20, 50, window_size=win_size))
         else:
             if flag == "TEST_ALL":
                 l = test_df_list
