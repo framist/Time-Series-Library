@@ -24,7 +24,7 @@ python -u run.py \
   --itr 1 \
   --learning_rate 0.001 \
   --train_epochs 400 \
-  --patience 100 \
+  --patience 50 \
   --use_amp
 
 python -u run.py \
@@ -49,5 +49,5 @@ python -u run.py \
   --itr 1 \
   --learning_rate 0.001 \
   --train_epochs 400 \
-  --patience 100 \
+  --patience 50 \
   --use_amp
