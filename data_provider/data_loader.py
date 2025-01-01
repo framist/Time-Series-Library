@@ -1277,7 +1277,7 @@ class EBDSC_2nd(Dataset):
         assert args.c_out == self.TAG_LEN
         assert flag in ["TRAIN", "VALID", "TEST_MINI", "TEST_ALL", "SCENE_I", "SCENE_II", "SCENE_III"]
         if_emb = True if "wve" in args.embed else False
-        print(f'EBDSC_2nd setting: {win_size=}, {flag=}, {args.embed=}, {if_emb=}, {args.wve_d_model=}')        
+        # print(f'EBDSC_2nd setting: {win_size=}, {flag=}, {args.embed=}, {if_emb=}, {args.wve_d_model=}')        
         
         self.args = args
         self.root_path = root_path

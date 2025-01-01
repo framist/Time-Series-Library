@@ -8,7 +8,8 @@ import os
 import time
 import warnings
 import numpy as np
-from utils.print_args import print_args
+
+from thop import profile, clever_format
 
 warnings.filterwarnings("ignore")
 
@@ -194,7 +195,8 @@ class Exp_Sorting(Exp_Basic):
         """
         if test:
             print("loading model")
-            self.model.load_state_dict(torch.load(os.path.join("./checkpoints/" + setting, "checkpoint.pth")))
+            path = os.path.join(self.args.checkpoints, setting)
+            self.model.load_state_dict(torch.load(os.path.join(path, "checkpoint.pth")))
 
         fs = ["SCENE_I", "SCENE_II", "SCENE_III", "TEST_ALL"]
         file_name = "result_sorting.txt"
@@ -216,7 +218,7 @@ class Exp_Sorting(Exp_Basic):
                 self.model.eval()
                 with torch.no_grad():
                     for i, (batch_x, label) in enumerate(test_loader):
-                        batch_x = batch_x.float().to(self.device)
+                        batch_x: torch.FloatTensor = batch_x.float().to(self.device)
                         label = label.to(self.device)
 
                         outputs = self.model(batch_x, None, None, None)
@@ -237,6 +239,13 @@ class Exp_Sorting(Exp_Basic):
                 
                 print(f"{flag:<10} {log}")
                 f.write(f"{flag:<10} {log}\n")
+                
+            # model info 
+
+            flops, params = profile(self.model, inputs=(batch_x, None, None, None))
+            flops, params = clever_format([flops, params], '%.3f')
+
+            print(f"FLOPs: {flops}, Params: {params}")                
                 
             f.write("\n")
             f.write("\n")
