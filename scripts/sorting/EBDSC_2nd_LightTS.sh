@@ -7,11 +7,11 @@ model_name=LightTS
 python -u run.py \
   --checkpoint ./results/ \
   --task_name sorting \
-  --is_training 1 \
+  --is_training 0 \
   --root_path ./dataset/EBDSC-2nd/ \
   --model_id EBDSC_2nd \
   --data EBDSC_2nd \
-  --data_regen_epoch 2 \
+  --data_regen_epoch 5 \
   --des 'woEmb' \
   --embed value \
   --wve_d_model 128 \
@@ -26,5 +26,5 @@ python -u run.py \
   --d_ff 256 \
   --itr 1 \
   --learning_rate 0.002 \
-  --train_epochs 400 \
+  --train_epochs 2 \
   --patience 100

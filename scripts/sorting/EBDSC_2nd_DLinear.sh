@@ -10,7 +10,7 @@ python -u run.py \
   --model_id EBDSC_2nd \
   --data EBDSC_2nd \
   --data_regen_epoch 2 \
-  --des 'indiv_extraWve_cat_as_c' \
+  --des 'extraWve_cat_as_c' \
   --embed wve cat_as_c \
   --wve_d_model 128 \
   --enc_in 640 \
@@ -18,38 +18,37 @@ python -u run.py \
   --seq_len 1024 \
   --c_out 12 \
   --model $model_name \
-  --dlinear_individual \
   --extra_emb \
-  --e_layers 8 \
-  --batch_size 64 \
+  --e_layers 2 \
+  --batch_size 1024 \
   --d_ff 256 \
   --itr 1 \
-  --learning_rate 0.001 \
-  --train_epochs 400 \
+  --learning_rate 0.005 \
+  --train_epochs 1 \
   --patience 50
 
-python -u run.py \
-  --checkpoint ./results/ \
-  --task_name sorting \
-  --is_training 1 \
-  --root_path ./dataset/EBDSC-2nd/ \
-  --model_id EBDSC_2nd \
-  --data EBDSC_2nd \
-  --data_regen_epoch 2 \
-  --des 'indiv_extraV' \
-  --embed value \
-  --wve_d_model 128 \
-  --d_model 128 \
-  --enc_in 5 \
-  --seq_len 1024 \
-  --c_out 12 \
-  --model $model_name \
-  --dlinear_individual \
-  --extra_emb \
-  --e_layers 8 \
-  --batch_size 64 \
-  --d_ff 256 \
-  --itr 1 \
-  --learning_rate 0.001 \
-  --train_epochs 400 \
-  --patience 50
+# python -u run.py \
+#   --checkpoint ./results/ \
+#   --task_name sorting \
+#   --is_training 1 \
+#   --root_path ./dataset/EBDSC-2nd/ \
+#   --model_id EBDSC_2nd \
+#   --data EBDSC_2nd \
+#   --data_regen_epoch 2 \
+#   --des 'indiv_extraV' \
+#   --embed value \
+#   --wve_d_model 128 \
+#   --d_model 128 \
+#   --enc_in 5 \
+#   --seq_len 1024 \
+#   --c_out 12 \
+#   --model $model_name \
+#   --dlinear_individual \
+#   --extra_emb \
+#   --e_layers 8 \
+#   --batch_size 64 \
+#   --d_ff 256 \
+#   --itr 1 \
+#   --learning_rate 0.001 \
+#   --train_epochs 400 \
+#   --patience 50
