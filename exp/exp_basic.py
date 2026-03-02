@@ -50,17 +50,29 @@ class Exp_Basic(object):
         return None
 
     def _acquire_device(self):
-        if self.args.use_gpu and self.args.gpu_type == 'cuda':
+        use_cuda = self.args.use_gpu and self.args.gpu_type == 'cuda' and torch.cuda.is_available()
+        use_mps = (
+            self.args.use_gpu
+            and self.args.gpu_type == 'mps'
+            and hasattr(torch.backends, "mps")
+            and torch.backends.mps.is_available()
+        )
+
+        if use_cuda:
             os.environ["CUDA_VISIBLE_DEVICES"] = str(
                 self.args.gpu) if not self.args.use_multi_gpu else self.args.devices
             device = torch.device('cuda:{}'.format(self.args.gpu))
             print('Use GPU: cuda:{}'.format(self.args.gpu))
-        elif self.args.use_gpu and self.args.gpu_type == 'mps':
+        elif use_mps:
             device = torch.device('mps')
             print('Use GPU: mps')
         else:
             device = torch.device('cpu')
+            if self.args.use_gpu:
+                print('GPU is not available, fallback to CPU')
+            self.args.use_gpu = False
             print('Use CPU')
+        self.args.device = device
         return device
 
     def _get_data(self):
@@ -109,4 +121,3 @@ class LazyModelDict(dict):
 
         self[key] = model_class
         return model_class
-

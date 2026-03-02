@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils import weight_norm
 import math
+from utils.embed_utils import parse_embed_arg
 
 
 class PositionalEmbedding(nn.Module):
@@ -106,15 +107,76 @@ class TimeFeatureEmbedding(nn.Module):
         return self.embed(x)
 
 
+class WVEmbs(nn.Module):
+    """
+    WVEmbs (Wide Value Embedding): sample the characteristic function e^{-i ω x}
+    with a deterministic log-spaced frequency set (RoPE-style).
+
+    Output is real-valued by concatenating [cos(ωx), sin(ωx)] pairs.
+    """
+
+    def __init__(self, dim, base=10000.0):
+        super(WVEmbs, self).__init__()
+        if dim < 2:
+            raise ValueError(f"WVEmbs dim must be >= 2, got {dim}")
+        if dim % 2 != 0:
+            raise ValueError(f"WVEmbs dim must be even (cos/sin pairs), got {dim}")
+
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("inv_freq", inv_freq)
+
+    def forward(self, x):
+        # x: (...,)
+        angles = x.unsqueeze(-1) * self.inv_freq  # (..., dim/2)
+        emb = torch.stack((angles.cos(), angles.sin()), dim=-1)  # (..., dim/2, 2)
+        return emb.flatten(-2)  # (..., dim)
+
+
+class WVLiftEmbedding(nn.Module):
+    """
+    WV-Lift Adapter (frontend):
+      1) per-variate WVEmbs lifting: x -> Z in R^{T x M x D}
+      2) cross-variate interaction: 1x1 Conv / MLP on the variate axis (M)
+      3) alignment projection: flatten (M*D) -> d_model
+    """
+
+    def __init__(self, c_in, d_model, dropout=0.1, base=10000.0):
+        super(WVLiftEmbedding, self).__init__()
+        wv_dim = d_model if (d_model % 2 == 0) else (d_model + 1)
+        self.wv_dim = wv_dim
+        self.c_in = c_in
+        self.d_model = d_model
+
+        self.wv = WVEmbs(dim=wv_dim, base=base)
+        self.var_mixer = nn.Identity() if c_in <= 1 else nn.Sequential(
+            nn.Linear(c_in, c_in),
+            nn.GELU(),
+            nn.Dropout(dropout),
+        )
+        self.proj = nn.Linear(c_in * wv_dim, d_model)
+
+    def forward(self, x):
+        # x: [B, T, M]
+        z = self.wv(x)  # [B, T, M, wv_dim]
+        z = z.permute(0, 1, 3, 2)  # [B, T, wv_dim, M]
+        z = self.var_mixer(z)
+        z = z.permute(0, 1, 3, 2)  # [B, T, M, wv_dim]
+        z = z.reshape(z.shape[0], z.shape[1], -1)  # [B, T, M*wv_dim]
+        return self.proj(z)  # [B, T, d_model]
+
+
 class DataEmbedding(nn.Module):
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
         super(DataEmbedding, self).__init__()
 
-        self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
+        time_embed_type, value_embed_type = parse_embed_arg(embed_type)
+
+        self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout) \
+            if value_embed_type == 'wv' else TokenEmbedding(c_in=c_in, d_model=d_model)
         self.position_embedding = PositionalEmbedding(d_model=d_model)
-        self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type,
-                                                    freq=freq) if embed_type != 'timeF' else TimeFeatureEmbedding(
-            d_model=d_model, embed_type=embed_type, freq=freq)
+        self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=time_embed_type,
+                                                    freq=freq) if time_embed_type != 'timeF' else TimeFeatureEmbedding(
+            d_model=d_model, embed_type=time_embed_type, freq=freq)
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, x_mark):
@@ -147,11 +209,14 @@ class DataEmbedding_wo_pos(nn.Module):
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
         super(DataEmbedding_wo_pos, self).__init__()
 
-        self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
+        time_embed_type, value_embed_type = parse_embed_arg(embed_type)
+
+        self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout) \
+            if value_embed_type == 'wv' else TokenEmbedding(c_in=c_in, d_model=d_model)
         self.position_embedding = PositionalEmbedding(d_model=d_model)
-        self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type,
-                                                    freq=freq) if embed_type != 'timeF' else TimeFeatureEmbedding(
-            d_model=d_model, embed_type=embed_type, freq=freq)
+        self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=time_embed_type,
+                                                    freq=freq) if time_embed_type != 'timeF' else TimeFeatureEmbedding(
+            d_model=d_model, embed_type=time_embed_type, freq=freq)
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, x_mark):

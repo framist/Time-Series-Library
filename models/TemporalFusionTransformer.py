@@ -5,6 +5,7 @@ from layers.Embed import DataEmbedding, TemporalEmbedding
 from torch import Tensor
 from typing import Optional
 from collections import namedtuple
+from utils.embed_utils import parse_embed_arg
 
 # static: time-independent features
 # observed: time features of the past(e.g. predicted targets)
@@ -18,7 +19,8 @@ datatype_dict = {'ETTh1': TypePos([], [x for x in range(7)]),
 
 
 def get_known_len(embed_type, freq):
-    if embed_type != 'timeF':
+    time_embed_type, _ = parse_embed_arg(embed_type)
+    if time_embed_type != 'timeF':
         if freq == 't':
             return 5
         else:
@@ -69,8 +71,9 @@ class TFTEmbedding(nn.Module):
         self.static_embedding = nn.ModuleList([DataEmbedding(1,configs.d_model,dropout=configs.dropout) for _ in range(self.static_len)]) \
             if self.static_len else None
         self.observed_embedding = nn.ModuleList([DataEmbedding(1,configs.d_model,dropout=configs.dropout) for _ in range(self.observed_len)])
-        self.known_embedding = TFTTemporalEmbedding(configs.d_model, configs.embed, configs.freq) \
-            if configs.embed != 'timeF' else TFTTimeFeatureEmbedding(configs.d_model, configs.embed, configs.freq)
+        time_embed_type, _ = parse_embed_arg(configs.embed)
+        self.known_embedding = TFTTemporalEmbedding(configs.d_model, time_embed_type, configs.freq) \
+            if time_embed_type != 'timeF' else TFTTimeFeatureEmbedding(configs.d_model, time_embed_type, configs.freq)
 
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         if self.static_len:
