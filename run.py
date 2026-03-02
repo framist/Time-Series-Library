@@ -94,6 +94,14 @@ if __name__ == '__main__':
                         help='phase_rotate 最大相位扰动（弧度），默认 π/8')
     parser.add_argument('--wv_mask_dlow_min', type=int, default=0,
                         help='dlow 下界：0 覆盖全频段；>0 限制只掩码更低频尾部（dlow_limited 变体）')
+    parser.add_argument('--wv_sampling', type=str, default='iss', choices=['iss', 'jss'],
+                        help='谱采样方式：iss=逐变量独立采样（默认）；jss=联合谱采样（维度不随通道数线性增长）')
+    parser.add_argument('--wv_jss_std', type=float, default=1.0,
+                        help='JSS 随机频率向量的标准差（只在 wv_sampling=jss 时使用）')
+    parser.add_argument('--wv_extrap_mode', type=str, default='direct', choices=['direct', 'scale'],
+                        help='值域外推策略：direct=直接映射；scale=相位缩放（x / wv_extrap_scale）')
+    parser.add_argument('--wv_extrap_scale', type=float, default=1.0,
+                        help='scale 外推的缩放因子 s（>1 降低相位推进速度；只在 wv_extrap_mode=scale 时使用）')
 
     # optimization
     parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')

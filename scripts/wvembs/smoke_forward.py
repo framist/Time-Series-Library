@@ -42,6 +42,11 @@ def _make_common_configs(model_name: str) -> Namespace:
         wv_mask_type="none",
         wv_mask_phi_max=3.141592653589793 / 8,
         wv_mask_dlow_min=0,
+        # WVEmbs extrapolation / sampling
+        wv_extrap_mode="direct",
+        wv_extrap_scale=1.0,
+        wv_sampling="iss",
+        wv_jss_std=1.0,
         # backbone（Transformer/Informer/TimesNet）
         d_model=64,
         n_heads=4,
@@ -94,6 +99,10 @@ def main():
     )
     parser.add_argument("--wv_mask_phi_max", type=float, default=3.141592653589793 / 8, help="phase_rotate 扰动上限（弧度）")
     parser.add_argument("--wv_mask_dlow_min", type=int, default=0, help="dlow 下界（dlow_limited 变体）")
+    parser.add_argument("--wv_extrap_mode", type=str, default="direct", choices=["direct", "scale"])
+    parser.add_argument("--wv_extrap_scale", type=float, default=1.0)
+    parser.add_argument("--wv_sampling", type=str, default="iss", choices=["iss", "jss"])
+    parser.add_argument("--wv_jss_std", type=float, default=1.0)
     args = parser.parse_args()
 
     model_names = [x.strip() for x in args.models.split(",") if x.strip()]
@@ -106,6 +115,10 @@ def main():
         cfg.wv_mask_type = args.wv_mask_type
         cfg.wv_mask_phi_max = args.wv_mask_phi_max
         cfg.wv_mask_dlow_min = args.wv_mask_dlow_min
+        cfg.wv_extrap_mode = args.wv_extrap_mode
+        cfg.wv_extrap_scale = args.wv_extrap_scale
+        cfg.wv_sampling = args.wv_sampling
+        cfg.wv_jss_std = args.wv_jss_std
         if name == "Transformer":
             from models.Transformer import Model as ModelCls
         elif name == "Informer":

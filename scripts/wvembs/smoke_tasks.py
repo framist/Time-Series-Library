@@ -35,6 +35,10 @@ def _base_cfg(task_name: str) -> Namespace:
         wv_mask_type="none",
         wv_mask_phi_max=3.141592653589793 / 8,
         wv_mask_dlow_min=0,
+        wv_extrap_mode="direct",
+        wv_extrap_scale=1.0,
+        wv_sampling="iss",
+        wv_jss_std=1.0,
         # shapes
         seq_len=32,
         label_len=16,
@@ -88,6 +92,10 @@ def main():
     )
     parser.add_argument("--wv_mask_phi_max", type=float, default=3.141592653589793 / 8)
     parser.add_argument("--wv_mask_dlow_min", type=int, default=0)
+    parser.add_argument("--wv_extrap_mode", type=str, default="direct", choices=["direct", "scale"])
+    parser.add_argument("--wv_extrap_scale", type=float, default=1.0)
+    parser.add_argument("--wv_sampling", type=str, default="iss", choices=["iss", "jss"])
+    parser.add_argument("--wv_jss_std", type=float, default=1.0)
     args = parser.parse_args()
 
     from models.Transformer import Model as Transformer
@@ -97,6 +105,10 @@ def main():
         cfg.wv_mask_type = args.wv_mask_type
         cfg.wv_mask_phi_max = args.wv_mask_phi_max
         cfg.wv_mask_dlow_min = args.wv_mask_dlow_min
+        cfg.wv_extrap_mode = args.wv_extrap_mode
+        cfg.wv_extrap_scale = args.wv_extrap_scale
+        cfg.wv_sampling = args.wv_sampling
+        cfg.wv_jss_std = args.wv_jss_std
         return cfg
 
     # 1) forecasting
@@ -136,4 +148,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

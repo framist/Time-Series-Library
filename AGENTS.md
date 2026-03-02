@@ -28,7 +28,7 @@
 
 ## TODO（后续实验/实现）
 
-- 值域外推策略（direct / scale 等）与对应实验脚本
-- 多通道联合谱采样（JSS）与相关性先验注入
+- 更系统的值域外推策略（direct / scale 之外的变体）与对应实验协议
+- 更严格的多通道联合谱采样（JSS）的相关性先验注入（协方差结构等）
 - 关闭/替换 `StandardScaler`（更贴近“分布无关”数据管线）
 - 按 backbone 做对照：Transformer / Informer / TimesNet / iTransformer / PatchTST 等

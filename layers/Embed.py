@@ -139,6 +139,10 @@ class WVLiftEmbedding(nn.Module):
     1) 逐变量 WVEmbs lifting：x -> Z，形状从 [B,T,M] 到 [B,T,M,D]
     2) 多通道交互：沿变量轴 M 做显式混合（此处用轻量 MLP；等价于 1x1 Conv 的一种实现）
     3) 形状对齐投影：将 [M*D] 投影回主干网络期望的 `d_model`
+
+    同时提供 `wv_sampling=jss` 的最小联合谱采样：
+    - 使用随机频率向量 ω_k ∈ R^M，对多通道向量做内积 angle_k=<ω_k, x>
+    - 输出维度固定为 D（不随通道数 M 线性增长），用于验证论文中的 JSS 思路
     """
 
     def __init__(self, c_in, d_model, dropout=0.1, base=10000.0, wv_cfg=None):
@@ -148,22 +152,49 @@ class WVLiftEmbedding(nn.Module):
         self.c_in = c_in
         self.d_model = d_model
 
+        self.sampling = str(getattr(wv_cfg, "wv_sampling", "iss")) if wv_cfg is not None else "iss"
+        self.jss_std = float(getattr(wv_cfg, "wv_jss_std", 1.0)) if wv_cfg is not None else 1.0
+        if self.sampling not in ("iss", "jss"):
+            raise ValueError(f"未知 wv_sampling={self.sampling!r}，可选 iss/jss")
+        if self.jss_std <= 0:
+            raise ValueError(f"wv_jss_std 必须为正数，但得到 {self.jss_std}")
+
+        self.extrap_mode = str(getattr(wv_cfg, "wv_extrap_mode", "direct")) if wv_cfg is not None else "direct"
+        self.extrap_scale = float(getattr(wv_cfg, "wv_extrap_scale", 1.0)) if wv_cfg is not None else 1.0
+        if self.extrap_mode not in ("direct", "scale"):
+            raise ValueError(f"未知 wv_extrap_mode={self.extrap_mode!r}，可选 direct/scale")
+        if self.extrap_scale <= 0:
+            raise ValueError(f"wv_extrap_scale 必须为正数，但得到 {self.extrap_scale}")
+
         wv_base = float(getattr(wv_cfg, "wv_base", base)) if wv_cfg is not None else base
-        self.wv = WVEmbs(dim=wv_dim, base=wv_base)
 
         self.mask_prob = float(getattr(wv_cfg, "wv_mask_prob", 0.0)) if wv_cfg is not None else 0.0
         self.mask_type = str(getattr(wv_cfg, "wv_mask_type", "none")) if wv_cfg is not None else "none"
         self.mask_phi_max = float(getattr(wv_cfg, "wv_mask_phi_max", math.pi / 8)) if wv_cfg is not None else (math.pi / 8)
         self.mask_dlow_min = int(getattr(wv_cfg, "wv_mask_dlow_min", 0)) if wv_cfg is not None else 0
 
-        self.var_mixer = nn.Identity() if c_in <= 1 else nn.Sequential(
-            nn.Linear(c_in, c_in),
-            nn.GELU(),
-            nn.Dropout(dropout),
-        )
-        self.proj = nn.Linear(c_in * wv_dim, d_model)
+        if self.sampling == "iss":
+            self.wv = WVEmbs(dim=wv_dim, base=wv_base)
+            self.jss_W = None
+            self.var_mixer = nn.Identity() if c_in <= 1 else nn.Sequential(
+                nn.Linear(c_in, c_in),
+                nn.GELU(),
+                nn.Dropout(dropout),
+            )
+            self.proj_iss = nn.Linear(c_in * wv_dim, d_model)
+            self.proj_jss = None
+        else:
+            self.wv = None
+            k = wv_dim // 2
+            w = torch.randn(k, c_in) * self.jss_std
+            norms = torch.norm(w, dim=1)
+            idx = torch.argsort(norms, descending=True)
+            self.register_buffer("jss_W", w[idx])
+            self.var_mixer = None
+            self.proj_iss = None
+            self.proj_jss = nn.Identity() if wv_dim == d_model else nn.Linear(wv_dim, d_model)
 
-    def _apply_freq_mask(self, z):
+    def _apply_freq_mask_pairs(self, z_pairs):
         """
         频域掩码增强（仅训练阶段生效）。
 
@@ -174,20 +205,17 @@ class WVLiftEmbedding(nn.Module):
         - `wv_mask_dlow_min`（dlow_limited 变体）
         """
         if (not self.training) or (self.mask_prob <= 0) or (self.mask_type in ("none", "None", "")):
-            return z
+            return z_pairs
+        if z_pairs.shape[-1] != 2:
+            raise ValueError(f"z_pairs 最后一维必须为 2（cos/sin），但得到 {z_pairs.shape[-1]}")
 
-        if z.shape[-1] % 2 != 0:
-            raise ValueError(f"WVEmbs 输出维度必须为偶数，但得到 {z.shape[-1]}")
-
-        bsz, t, m, dim = z.shape
-        k = dim // 2
-
-        z_pairs = z.view(bsz, t, m, k, 2)
-        device = z.device
+        bsz = z_pairs.shape[0]
+        k = z_pairs.shape[-2]
+        device = z_pairs.device
 
         apply = torch.rand((bsz,), device=device) < self.mask_prob  # [B]
         if not apply.any():
-            return z
+            return z_pairs
 
         dlow_min = max(0, min(self.mask_dlow_min, k))
         d_low = torch.randint(dlow_min, k + 1, (bsz,), device=device)  # [B], inclusive k
@@ -195,18 +223,18 @@ class WVLiftEmbedding(nn.Module):
         freq_mask = torch.arange(k, device=device).unsqueeze(0) >= d_low.unsqueeze(1)  # [B,K]
         freq_mask = freq_mask & apply.unsqueeze(1)
         if not freq_mask.any():
-            return z
+            return z_pairs
 
-        freq_mask = freq_mask[:, None, None, :, None]  # [B,1,1,K,1]
+        freq_mask = freq_mask.view(bsz, *([1] * (z_pairs.dim() - 3)), k, 1)
 
         if self.mask_type == "zero":
             z_pairs = torch.where(freq_mask, torch.zeros(1, device=device, dtype=z_pairs.dtype), z_pairs)
         elif self.mask_type == "arcsine":
-            phi = torch.rand((bsz, t, m, k), device=device) * (2 * math.pi)
+            phi = torch.rand(z_pairs.shape[:-1], device=device) * (2 * math.pi)
             repl = torch.stack((phi.cos(), phi.sin()), dim=-1).to(dtype=z_pairs.dtype)
             z_pairs = torch.where(freq_mask, repl, z_pairs)
         elif self.mask_type == "phase_rotate":
-            delta = (torch.rand((bsz, t, m, k), device=device) * 2 - 1) * self.mask_phi_max
+            delta = (torch.rand(z_pairs.shape[:-1], device=device) * 2 - 1) * self.mask_phi_max
             cos_d = delta.cos().to(dtype=z_pairs.dtype)
             sin_d = delta.sin().to(dtype=z_pairs.dtype)
 
@@ -218,17 +246,33 @@ class WVLiftEmbedding(nn.Module):
         else:
             raise ValueError(f"未知 wv_mask_type={self.mask_type!r}，可选 none/zero/arcsine/phase_rotate")
 
-        return z_pairs.view(bsz, t, m, dim)
+        return z_pairs
 
     def forward(self, x):
         # x: [B, T, M]
-        z = self.wv(x)  # [B, T, M, wv_dim]
-        z = self._apply_freq_mask(z)
-        z = z.permute(0, 1, 3, 2)  # [B, T, wv_dim, M]
-        z = self.var_mixer(z)
-        z = z.permute(0, 1, 3, 2)  # [B, T, M, wv_dim]
-        z = z.reshape(z.shape[0], z.shape[1], -1)  # [B, T, M*wv_dim]
-        return self.proj(z)  # [B, T, d_model]
+        if self.extrap_mode == "scale" and self.extrap_scale != 1.0:
+            x = x / self.extrap_scale
+
+        if self.sampling == "iss":
+            z = self.wv(x)  # [B, T, M, wv_dim]
+            bsz, t, m, dim = z.shape
+            k = dim // 2
+            z_pairs = z.view(bsz, t, m, k, 2)
+            z_pairs = self._apply_freq_mask_pairs(z_pairs)
+            z = z_pairs.view(bsz, t, m, dim)
+
+            z = z.permute(0, 1, 3, 2)  # [B, T, wv_dim, M]
+            z = self.var_mixer(z)
+            z = z.permute(0, 1, 3, 2)  # [B, T, M, wv_dim]
+            z = z.reshape(z.shape[0], z.shape[1], -1)  # [B, T, M*wv_dim]
+            return self.proj_iss(z)  # [B, T, d_model]
+
+        # wv_sampling = jss
+        angles = torch.matmul(x, self.jss_W.t()) / math.sqrt(max(1, self.c_in))  # [B, T, K]
+        z_pairs = torch.stack((angles.cos(), angles.sin()), dim=-1)  # [B, T, K, 2]
+        z_pairs = self._apply_freq_mask_pairs(z_pairs)
+        z = z_pairs.flatten(-2)  # [B, T, 2K]
+        return self.proj_jss(z)  # [B, T, d_model]
 
 
 class DataEmbedding(nn.Module):

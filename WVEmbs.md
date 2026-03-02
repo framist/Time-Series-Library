@@ -29,7 +29,7 @@ WVEmbs 的核心是把连续物理量视为值域上的 Dirac 测度 \(\delta_x\
 - `models/TemporalFusionTransformer.py`：同步修正 `timeF` 判定（避免 `wv_timeF` 被误判）
 - `exp/exp_basic.py`：设备选择更稳健（CUDA/MPS 不可用时自动回退 CPU，并同步 `args.use_gpu/args.device`）
 
-当前 WVEmbs 频率集合采用 RoPE 风格的确定性对数频率（log-spaced）作为最小基线；已实现训练期的频域掩码增强（zero/arcsine/phase-rotate + dlow\_limited）。联合谱采样（JSS）与值域外推策略仍待在代码里展开。
+当前 WVEmbs 频率集合采用 RoPE 风格的确定性对数频率（log-spaced）作为最小基线；已实现训练期的频域掩码增强（zero/arcsine/phase-rotate + dlow\_limited）。此外提供了**最小版联合谱采样（JSS）**与**相位缩放外推（direct/scale）**开关，用于对齐论文中的方法组件与消融需求。
 
 ## 最小跑通（无需数据集的 smoke test）
 
@@ -71,6 +71,24 @@ python scripts/wvembs/smoke_tasks.py --wv_mask_prob 1 --wv_mask_type arcsine
 - `--wv_mask_phi_max`：`phase_rotate` 的最大相位扰动（弧度），默认 \(\pi/8\)
 - `--wv_mask_dlow_min`：dlow 下界；0 表示覆盖全频段，>0 表示限制只掩码更低频尾部（对应 dlow\_limited 变体）
 
+## 值域外推（direct / scale）
+
+最小实现采用“相位缩放”近似论文中的 scale 外推：当 `--wv_extrap_mode scale` 时，embedding 内部使用 `x / s` 替代 `x`（`s=--wv_extrap_scale`），从而降低相位推进速度，缓解外推域相位折叠。
+
+参数：
+- `--wv_extrap_mode`：`direct|scale`
+- `--wv_extrap_scale`：缩放因子 \(s>0\)
+
+## 联合谱采样（JSS）
+
+最小实现提供两种谱采样方式：
+- `--wv_sampling iss`：逐变量独立采样（ISS，默认；即先对每个通道做 WVEmbs，再做显式混合）
+- `--wv_sampling jss`：联合谱采样（JSS；对多通道向量采样随机频率向量并做内积，再取 cos/sin）
+
+参数：
+- `--wv_sampling`：`iss|jss`
+- `--wv_jss_std`：JSS 随机频率向量的标准差（控制角度尺度）
+
 ## 最小训练（需要数据集）
 
 下载并放置数据集到 `./dataset` 后，可参考 README 的 quick test，把 `--embed` 换成 `wv_timeF` 并减小规模以适配小 GPU：
@@ -108,6 +126,7 @@ python -u run.py \
 
 - Forecast（ETTh1）：`scripts/wvembs/forecast_etth1_backbones.sh`
 - Forecast（ETTh1 + no\_scale）：`scripts/wvembs/forecast_etth1_noscale.sh`
+- Forecast（ETTh1 + ISS vs JSS）：`scripts/wvembs/forecast_etth1_jss.sh`
 - Imputation（ETTh1）：`scripts/wvembs/imputation_etth1_quick.sh`
 - Anomaly Detection（PSM）：`scripts/wvembs/anomaly_psm_quick.sh`
 - Classification（Heartbeat/UEA）：`scripts/wvembs/classification_heartbeat_quick.sh`
@@ -116,5 +135,5 @@ python -u run.py \
 
 目前 TSLib 的多数数据集仍默认使用 `StandardScaler`（依赖训练集统计量），因此即便输入 embedding 改为 WVEmbs，也还没有完全实现“端到端分布无关”的数据管线。后续若要更贴近论文设定，需要进一步支持：
 - 关闭数据集级标准化（`run.py` 已支持 `--no_scale`）/ 或引入物理先验尺度（\(X_{\max},\delta\)）的无量纲化
-- 掩码增强与外推策略（direct / scale / phase-rotate 等）
-- 多通道联合谱采样（JSS）与相关性先验注入
+- 更系统的外推与掩码策略（例如只对低频尾部掩码的更细粒度控制、更多外推变体与协议）
+- 更严格的多通道联合谱采样（JSS）的物理相关性先验注入（例如协方差结构、与任务相关的采样分布设计）
