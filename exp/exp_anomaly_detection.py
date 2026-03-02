@@ -43,8 +43,11 @@ class Exp_Anomaly_Detection(Exp_Basic):
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
         self.model.eval()
+        max_val_steps = getattr(self.args, 'max_val_steps', -1)
         with torch.no_grad():
             for i, (batch_x, _) in enumerate(vali_loader):
+                if max_val_steps > 0 and i >= max_val_steps:
+                    break
                 batch_x = batch_x.float().to(self.device)
 
                 outputs = self.model(batch_x, None, None, None)
@@ -83,7 +86,10 @@ class Exp_Anomaly_Detection(Exp_Basic):
 
             self.model.train()
             epoch_time = time.time()
+            max_train_steps = getattr(self.args, 'max_train_steps', -1)
             for i, (batch_x, batch_y) in enumerate(train_loader):
+                if max_train_steps > 0 and i >= max_train_steps:
+                    break
                 iter_count += 1
                 model_optim.zero_grad()
 
@@ -139,10 +145,13 @@ class Exp_Anomaly_Detection(Exp_Basic):
 
         self.model.eval()
         self.anomaly_criterion = nn.MSELoss(reduce=False)
+        max_test_steps = getattr(self.args, 'max_test_steps', -1)
 
         # (1) stastic on the train set
         with torch.no_grad():
             for i, (batch_x, batch_y) in enumerate(train_loader):
+                if max_test_steps > 0 and i >= max_test_steps:
+                    break
                 batch_x = batch_x.float().to(self.device)
                 # reconstruction
                 outputs = self.model(batch_x, None, None, None)
@@ -158,6 +167,8 @@ class Exp_Anomaly_Detection(Exp_Basic):
         attens_energy = []
         test_labels = []
         for i, (batch_x, batch_y) in enumerate(test_loader):
+            if max_test_steps > 0 and i >= max_test_steps:
+                break
             batch_x = batch_x.float().to(self.device)
             # reconstruction
             outputs = self.model(batch_x, None, None, None)

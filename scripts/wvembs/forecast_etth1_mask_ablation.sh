@@ -26,6 +26,9 @@ D_LAYERS=1
 EPOCHS=1
 BATCH=8
 WORKERS=2
+MAX_TRAIN=50
+MAX_VAL=10
+MAX_TEST=10
 
 MASK_PROB=0.75
 PHI_MAX=0.39269908169872414 # pi/8
@@ -54,6 +57,9 @@ for mask_type in none zero arcsine phase_rotate; do
     --train_epochs "${EPOCHS}" \
     --batch_size "${BATCH}" \
     --num_workers "${WORKERS}" \
+    --max_train_steps "${MAX_TRAIN}" \
+    --max_val_steps "${MAX_VAL}" \
+    --max_test_steps "${MAX_TEST}" \
     --checkpoints ./checkpoints_wvembs/ \
     --embed "${EMBED}" \
     --wv_mask_prob "${MASK_PROB}" \
@@ -87,6 +93,9 @@ python -u run.py \
   --train_epochs "${EPOCHS}" \
   --batch_size "${BATCH}" \
   --num_workers "${WORKERS}" \
+  --max_train_steps "${MAX_TRAIN}" \
+  --max_val_steps "${MAX_VAL}" \
+  --max_test_steps "${MAX_TEST}" \
   --checkpoints ./checkpoints_wvembs/ \
   --embed "${EMBED}" \
   --wv_mask_prob "${MASK_PROB}" \
@@ -95,4 +104,3 @@ python -u run.py \
   --wv_mask_dlow_min 24 \
   --itr 1 \
   --des "WVEmbsMask"
-

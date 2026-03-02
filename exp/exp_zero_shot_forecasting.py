@@ -48,8 +48,11 @@ class Exp_Zero_Shot_Forecast(Exp_Basic):
             os.makedirs(folder_path)
 
         self.model.eval()
+        max_test_steps = getattr(self.args, 'max_test_steps', -1)
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+                if max_test_steps > 0 and i >= max_test_steps:
+                    break
                 # start_time = time.time()
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)

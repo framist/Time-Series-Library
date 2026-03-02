@@ -27,6 +27,9 @@ D_LAYERS=1
 EPOCHS=1
 BATCH=8
 WORKERS=2
+MAX_TRAIN=50
+MAX_VAL=10
+MAX_TEST=10
 
 for sampling in iss jss; do
   python -u run.py \
@@ -52,6 +55,9 @@ for sampling in iss jss; do
     --train_epochs "${EPOCHS}" \
     --batch_size "${BATCH}" \
     --num_workers "${WORKERS}" \
+    --max_train_steps "${MAX_TRAIN}" \
+    --max_val_steps "${MAX_VAL}" \
+    --max_test_steps "${MAX_TEST}" \
     --checkpoints ./checkpoints_wvembs/ \
     --embed "${EMBED}" \
     --wv_sampling "${sampling}" \
@@ -59,4 +65,3 @@ for sampling in iss jss; do
     --itr 1 \
     --des "WVEmbsJSS"
 done
-

@@ -13,6 +13,9 @@ MODEL=TimesNet
 EPOCHS=1
 BATCH=16
 WORKERS=0
+MAX_TRAIN=50
+MAX_VAL=10
+MAX_TEST=10
 
 for embed in timeF wv_timeF; do
   python -u run.py \
@@ -32,9 +35,11 @@ for embed in timeF wv_timeF; do
     --batch_size "${BATCH}" \
     --learning_rate 0.001 \
     --num_workers "${WORKERS}" \
+    --max_train_steps "${MAX_TRAIN}" \
+    --max_val_steps "${MAX_VAL}" \
+    --max_test_steps "${MAX_TEST}" \
     --checkpoints ./checkpoints_wvembs/ \
     --embed "${embed}" \
     --itr 1 \
     --des "WVEmbs"
 done
-

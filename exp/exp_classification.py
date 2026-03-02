@@ -49,8 +49,11 @@ class Exp_Classification(Exp_Basic):
         preds = []
         trues = []
         self.model.eval()
+        max_val_steps = getattr(self.args, 'max_val_steps', -1)
         with torch.no_grad():
             for i, (batch_x, label, padding_mask) in enumerate(vali_loader):
+                if max_val_steps > 0 and i >= max_val_steps:
+                    break
                 batch_x = batch_x.float().to(self.device)
                 padding_mask = padding_mask.float().to(self.device)
                 label = label.to(self.device)
@@ -100,7 +103,10 @@ class Exp_Classification(Exp_Basic):
             self.model.train()
             epoch_time = time.time()
 
+            max_train_steps = getattr(self.args, 'max_train_steps', -1)
             for i, (batch_x, label, padding_mask) in enumerate(train_loader):
+                if max_train_steps > 0 and i >= max_train_steps:
+                    break
                 iter_count += 1
                 model_optim.zero_grad()
 
@@ -155,8 +161,11 @@ class Exp_Classification(Exp_Basic):
             os.makedirs(folder_path)
 
         self.model.eval()
+        max_test_steps = getattr(self.args, 'max_test_steps', -1)
         with torch.no_grad():
             for i, (batch_x, label, padding_mask) in enumerate(test_loader):
+                if max_test_steps > 0 and i >= max_test_steps:
+                    break
                 batch_x = batch_x.float().to(self.device)
                 padding_mask = padding_mask.float().to(self.device)
                 label = label.to(self.device)
