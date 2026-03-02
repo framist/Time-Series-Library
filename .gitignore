@@ -164,6 +164,8 @@ checkpoints_wvembs/
 results/
 result_long_term_forecast.txt
 result_anomaly_detection.txt
+result_imputation.txt
+result_zero_shot_forecast_search.txt
 scripts/augmentation/
 run_anylearn.py
 environment.txt

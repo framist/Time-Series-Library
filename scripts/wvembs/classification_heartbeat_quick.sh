@@ -22,7 +22,7 @@ for embed in timeF wv_timeF; do
     --task_name classification \
     --is_training 1 \
     --root_path "${ROOT}/" \
-    --model_id "WVEmbs_Cls_Heartbeat_${MODEL}_${embed}" \
+    --model_id Heartbeat \
     --model "${MODEL}" \
     --data "${DATASET}" \
     --e_layers 2 \
