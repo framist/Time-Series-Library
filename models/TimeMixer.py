@@ -203,10 +203,10 @@ class Model(nn.Module):
 
         if self.channel_independence:
             self.enc_embedding = DataEmbedding_wo_pos(1, configs.d_model, configs.embed, configs.freq,
-                                                      configs.dropout)
+                                                      configs.dropout, wv_cfg=configs)
         else:
             self.enc_embedding = DataEmbedding_wo_pos(configs.enc_in, configs.d_model, configs.embed, configs.freq,
-                                                      configs.dropout)
+                                                      configs.dropout, wv_cfg=configs)
 
         self.layer = configs.e_layers
 

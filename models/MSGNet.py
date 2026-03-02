@@ -97,7 +97,7 @@ class Model(nn.Module):
 
         self.model = nn.ModuleList([ScaleGraphBlock(configs) for _ in range(configs.e_layers)])
         self.enc_embedding = DataEmbedding(configs.enc_in, configs.d_model,
-                                           configs.embed, configs.freq, configs.dropout)
+                                           configs.embed, configs.freq, configs.dropout, wv_cfg=configs)
         self.layer = configs.e_layers
         self.layer_norm = nn.LayerNorm(configs.d_model)
         self.predict_linear = nn.Linear(
@@ -243,4 +243,3 @@ class Model(nn.Module):
             dec_out = self.classification(x_enc, x_mark_enc)
             return dec_out  # [B, N]
         return None
-

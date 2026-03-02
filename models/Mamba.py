@@ -18,7 +18,7 @@ class Model(nn.Module):
         self.d_inner = configs.d_model * configs.expand
         self.dt_rank = math.ceil(configs.d_model / 16) # TODO implement "auto"
         
-        self.embedding = DataEmbedding(configs.enc_in, configs.d_model, configs.embed, configs.freq, configs.dropout)
+        self.embedding = DataEmbedding(configs.enc_in, configs.d_model, configs.embed, configs.freq, configs.dropout, wv_cfg=configs)
 
         self.mamba = Mamba(
             d_model = configs.d_model,

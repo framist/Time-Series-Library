@@ -23,7 +23,7 @@ class Model(nn.Module):
         self.d_inner = configs.d_model * configs.expand
         self.dt_rank = math.ceil(configs.d_model / 16)
 
-        self.embedding = DataEmbedding(configs.enc_in, configs.d_model, configs.embed, configs.freq, configs.dropout)
+        self.embedding = DataEmbedding(configs.enc_in, configs.d_model, configs.embed, configs.freq, configs.dropout, wv_cfg=configs)
 
         self.layers = nn.ModuleList([ResidualBlock(configs, self.d_inner, self.dt_rank) for _ in range(configs.e_layers)])
         self.norm = RMSNorm(configs.d_model)

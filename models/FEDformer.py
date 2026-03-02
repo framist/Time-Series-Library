@@ -33,9 +33,9 @@ class Model(nn.Module):
         # Decomp
         self.decomp = series_decomp(configs.moving_avg)
         self.enc_embedding = DataEmbedding(configs.enc_in, configs.d_model, configs.embed, configs.freq,
-                                           configs.dropout)
+                                           configs.dropout, wv_cfg=configs)
         self.dec_embedding = DataEmbedding(configs.dec_in, configs.d_model, configs.embed, configs.freq,
-                                           configs.dropout)
+                                           configs.dropout, wv_cfg=configs)
 
         if self.version == 'Wavelets':
             encoder_self_att = MultiWaveletTransform(ich=configs.d_model, L=1, base='legendre')
