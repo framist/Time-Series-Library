@@ -12,11 +12,30 @@ from data_provider.uea import subsample, interpolate_missing, Normalizer
 from sktime.datasets import load_from_tsfile_to_dataframe
 import warnings
 from utils.augmentation import run_augmentation_single
-from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 warnings.filterwarnings('ignore')
 
 HUGGINGFACE_REPO = "thuml/Time-Series-Library"
+
+def _hf_download_dataset_file(root_path: str, data_path: str) -> str:
+    """
+    当本地 `root_path/data_path` 不存在时，从 Hugging Face 数据集仓库下载对应文件并返回本地缓存路径。
+
+    约定：仓库内按数据集目录组织，例如：
+    - ETT-small/ETTh1.csv
+    - electricity/electricity.csv
+    - PSM/train.csv
+    """
+    subdir = os.path.basename(os.path.normpath(root_path))
+    candidates = [f"{subdir}/{data_path}", data_path]
+    last_err = None
+    for rel in candidates:
+        try:
+            return hf_hub_download(repo_id=HUGGINGFACE_REPO, filename=rel, repo_type="dataset")
+        except Exception as e:
+            last_err = e
+            continue
+    raise last_err
 
 class Dataset_ETT_hour(Dataset):
     def __init__(self, args, root_path, flag='train', size=None,
@@ -52,13 +71,11 @@ class Dataset_ETT_hour(Dataset):
         self.scaler = StandardScaler()
 
         local_fp = os.path.join(self.root_path, self.data_path)
-        cfg_name = os.path.splitext(os.path.basename(self.data_path))[0]
 
         if os.path.exists(local_fp):
             df_raw = pd.read_csv(local_fp)
         else:
-            ds = load_dataset(HUGGINGFACE_REPO, name=cfg_name)
-            df_raw = ds["train"].to_pandas()
+            df_raw = pd.read_csv(_hf_download_dataset_file(self.root_path, self.data_path))
             
         border1s = [0, 12 * 30 * 24 - self.seq_len, 12 * 30 * 24 + 4 * 30 * 24 - self.seq_len]
         border2s = [12 * 30 * 24, 12 * 30 * 24 + 4 * 30 * 24, 12 * 30 * 24 + 8 * 30 * 24]
@@ -150,15 +167,13 @@ class Dataset_ETT_minute(Dataset):
 
     def __read_data__(self):
         self.scaler = StandardScaler()
-        
+
         local_fp = os.path.join(self.root_path, self.data_path)
-        cfg_name = os.path.splitext(os.path.basename(self.data_path))[0]
 
         if os.path.exists(local_fp):
             df_raw = pd.read_csv(local_fp)
         else:
-            ds = load_dataset(HUGGINGFACE_REPO, name=cfg_name)
-            df_raw = ds["train"].to_pandas()
+            df_raw = pd.read_csv(_hf_download_dataset_file(self.root_path, self.data_path))
 
         border1s = [0, 12 * 30 * 24 * 4 - self.seq_len, 12 * 30 * 24 * 4 + 4 * 30 * 24 * 4 - self.seq_len]
         border2s = [12 * 30 * 24 * 4, 12 * 30 * 24 * 4 + 4 * 30 * 24 * 4, 12 * 30 * 24 * 4 + 8 * 30 * 24 * 4]
@@ -253,14 +268,11 @@ class Dataset_Custom(Dataset):
     def __read_data__(self):
         self.scaler = StandardScaler()
         local_fp = os.path.join(self.root_path, self.data_path)
-        cfg_name = os.path.splitext(os.path.basename(self.data_path))[0]
 
         if os.path.exists(local_fp):
             df_raw = pd.read_csv(local_fp)
         else:
-            ds = load_dataset(HUGGINGFACE_REPO, name=cfg_name)
-            split_name = "train" if "train" in ds else list(ds.keys())[0]
-            df_raw = ds[split_name].to_pandas()
+            df_raw = pd.read_csv(_hf_download_dataset_file(self.root_path, self.data_path))
 
         '''
         df_raw.columns: ['date', ...(other features), target feature]
@@ -424,11 +436,9 @@ class PSMSegLoader(Dataset):
             test_df       = pd.read_csv(test_path)
             test_label_df = pd.read_csv(label_path)
         else:
-            ds_data  = load_dataset(HUGGINGFACE_REPO, name="PSM-data")
-            ds_label = load_dataset(HUGGINGFACE_REPO, name="PSM-label")
-            train_df      = ds_data["train"].to_pandas()
-            test_df       = ds_data["test"].to_pandas()
-            test_label_df = ds_label[next(iter(ds_label))].to_pandas()
+            train_df = pd.read_csv(_hf_download_dataset_file(root_path, "train.csv"))
+            test_df = pd.read_csv(_hf_download_dataset_file(root_path, "test.csv"))
+            test_label_df = pd.read_csv(_hf_download_dataset_file(root_path, "test_label.csv"))
 
         data = train_df.values[:, 1:]
         data = np.nan_to_num(data)
@@ -672,9 +682,8 @@ class SWATSegLoader(Dataset):
             train_data = pd.read_csv(train2_path)
             test_data   = pd.read_csv(test_path)
         else:
-            ds = load_dataset(HUGGINGFACE_REPO, name="SWaT")
-            train_data = ds["train"].to_pandas()
-            test_data  = ds["test"].to_pandas()
+            train_data = pd.read_csv(_hf_download_dataset_file(root_path, "swat_train2.csv"))
+            test_data = pd.read_csv(_hf_download_dataset_file(root_path, "swat2.csv"))
         labels = test_data.values[:, -1:]
         train_data = train_data.values[:, :-1]
         test_data = test_data.values[:, :-1]
