@@ -109,10 +109,11 @@ class TimeFeatureEmbedding(nn.Module):
 
 class WVEmbs(nn.Module):
     """
-    WVEmbs (Wide Value Embedding): sample the characteristic function e^{-i ω x}
-    with a deterministic log-spaced frequency set (RoPE-style).
+    WVEmbs（Wide Value Embedding）：
+    对特征函数 e^{-i ω x} 进行离散谱点采样，并用实值形式输出。
 
-    Output is real-valued by concatenating [cos(ωx), sin(ωx)] pairs.
+    - 频率集合：采用 RoPE 风格的确定性对数频率（log-spaced），并按“高频在前、低频在后”排序。
+    - 输出：将复数特征按 [cos(ωx), sin(ωx)] 拼接为实值向量，维度必须为偶数。
     """
 
     def __init__(self, dim, base=10000.0):
@@ -134,10 +135,10 @@ class WVEmbs(nn.Module):
 
 class WVLiftEmbedding(nn.Module):
     """
-    WV-Lift Adapter (frontend):
-      1) per-variate WVEmbs lifting: x -> Z in R^{T x M x D}
-      2) cross-variate interaction: 1x1 Conv / MLP on the variate axis (M)
-      3) alignment projection: flatten (M*D) -> d_model
+    WV-Lift Adapter（前端适配器，最小版本）：
+    1) 逐变量 WVEmbs lifting：x -> Z，形状从 [B,T,M] 到 [B,T,M,D]
+    2) 多通道交互：沿变量轴 M 做显式混合（此处用轻量 MLP；等价于 1x1 Conv 的一种实现）
+    3) 形状对齐投影：将 [M*D] 投影回主干网络期望的 `d_model`
     """
 
     def __init__(self, c_in, d_model, dropout=0.1, base=10000.0):

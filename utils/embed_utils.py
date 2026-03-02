@@ -1,19 +1,19 @@
 def parse_embed_arg(embed: str):
     """
-    Parse the unified `--embed` argument.
+    解析统一的 `--embed` 参数。
 
-    Legacy (upstream) meanings:
-      - timeF / fixed / learned: only controls temporal embedding + timeenc.
+    兼容原仓库含义：
+    - `timeF` / `fixed` / `learned`：仅控制时间特征编码方式 + `timeenc`（数据侧时间特征生成）。
 
-    Extensions for WVEmbs experiments in this repo:
-      - wv: alias of wv_timeF
-      - wv_<time_embed>: enable WVEmbs value embedding, while keeping temporal embedding type.
+    为 WVEmbs 实验扩展：
+    - `wv`：等价于 `wv_timeF`
+    - `wv_<time_embed>`：启用 WVEmbs 作为 value embedding，同时保持时间特征编码方式为 `<time_embed>`。
 
-    Returns
-    -------
+    返回
+    ----
     (time_embed_type, value_embed_type)
-      - time_embed_type: str, typically one of {timeF, fixed, learned}
-      - value_embed_type: str, one of {token, wv}
+    - `time_embed_type`：通常为 `timeF/fixed/learned`
+    - `value_embed_type`：`token`（原 TokenEmbedding）或 `wv`（WVEmbs + WV-Lift）
     """
     if embed is None:
         return "timeF", "token"
@@ -33,4 +33,3 @@ def parse_embed_arg(embed: str):
         return (time_embed or "timeF"), "wv"
 
     return embed, "token"
-

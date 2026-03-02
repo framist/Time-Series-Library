@@ -1,3 +1,11 @@
+"""
+WVEmbs 最小 smoke test：
+
+- 不依赖真实数据集
+- 随机生成 (x_enc, x_mark_enc, x_dec, x_mark_dec)
+- 对若干 backbone 做一次前向 + 反传，验证“接入 WVEmbs 后不崩、梯度可回传”
+"""
+
 import argparse
 from argparse import Namespace
 
@@ -13,22 +21,22 @@ if _REPO_ROOT not in sys.path:
 
 
 def _make_common_configs(model_name: str) -> Namespace:
-    # Minimal config set that works for several mainstream forecasting backbones.
+    # 这套最小配置可覆盖多个主流预测 backbone（Transformer / Informer / TimesNet）。
     return Namespace(
         task_name="long_term_forecast",
         model=model_name,
-        # data / shapes
+        # 数据形状
         seq_len=32,
         label_len=16,
         pred_len=16,
         enc_in=3,
         dec_in=3,
         c_out=3,
-        # embedding
+        # embedding（启用 WVEmbs）
         embed="wv_timeF",
         freq="h",
         dropout=0.1,
-        # backbone (Transformer/Informer/TimesNet)
+        # backbone（Transformer/Informer/TimesNet）
         d_model=64,
         n_heads=4,
         e_layers=2,
@@ -44,7 +52,7 @@ def _make_common_configs(model_name: str) -> Namespace:
 
 
 def _make_fake_batch(cfg: Namespace, batch_size: int = 2):
-    # `timeF` produces 4-d time features when freq='h'
+    # `timeF` 在 freq='h' 下生成 4 维时间特征（month/day/weekday/hour 的线性组合特征）。
     x_enc = torch.randn(batch_size, cfg.seq_len, cfg.enc_in)
     x_mark_enc = torch.randn(batch_size, cfg.seq_len, 4)
     x_dec = torch.randn(batch_size, cfg.label_len + cfg.pred_len, cfg.dec_in)
