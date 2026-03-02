@@ -66,6 +66,7 @@ def data_provider(args, flag):
     else:
         if args.data == 'm4':
             drop_last = False
+        scale = getattr(args, "scale", True)
         data_set = Data(
             args = args,
             root_path=args.root_path,
@@ -74,6 +75,7 @@ def data_provider(args, flag):
             size=[args.seq_len, args.label_len, args.pred_len],
             features=args.features,
             target=args.target,
+            scale=scale,
             timeenc=timeenc,
             freq=freq,
             seasonal_patterns=args.seasonal_patterns

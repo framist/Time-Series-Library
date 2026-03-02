@@ -107,6 +107,7 @@ python -u run.py \
 ## 各任务最小脚本（需要数据集）
 
 - Forecast（ETTh1）：`scripts/wvembs/forecast_etth1_backbones.sh`
+- Forecast（ETTh1 + no\_scale）：`scripts/wvembs/forecast_etth1_noscale.sh`
 - Imputation（ETTh1）：`scripts/wvembs/imputation_etth1_quick.sh`
 - Anomaly Detection（PSM）：`scripts/wvembs/anomaly_psm_quick.sh`
 - Classification（Heartbeat/UEA）：`scripts/wvembs/classification_heartbeat_quick.sh`
@@ -114,6 +115,6 @@ python -u run.py \
 ## 备注（与“分布无关”目标的差距）
 
 目前 TSLib 的多数数据集仍默认使用 `StandardScaler`（依赖训练集统计量），因此即便输入 embedding 改为 WVEmbs，也还没有完全实现“端到端分布无关”的数据管线。后续若要更贴近论文设定，需要进一步支持：
-- 关闭数据集级标准化 / 或引入物理先验尺度（\(X_{\max},\delta\)）的无量纲化
+- 关闭数据集级标准化（`run.py` 已支持 `--no_scale`）/ 或引入物理先验尺度（\(X_{\max},\delta\)）的无量纲化
 - 掩码增强与外推策略（direct / scale / phase-rotate 等）
 - 多通道联合谱采样（JSS）与相关性先验注入
