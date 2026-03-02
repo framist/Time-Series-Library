@@ -28,6 +28,7 @@ WVEmbs 的核心是把连续物理量视为值域上的 Dirac 测度 \(\delta_x\
 - `data_provider/data_factory.py`：修正 `timeenc` 判定，使 `wv_timeF` 仍走 `timeF` 的时间特征生成
 - `models/TemporalFusionTransformer.py`：同步修正 `timeF` 判定（避免 `wv_timeF` 被误判）
 - `exp/exp_basic.py`：设备选择更稳健（CUDA/MPS 不可用时自动回退 CPU，并同步 `args.use_gpu/args.device`）
+- `run.py` + `exp/*`：新增 `--max_train_steps/--max_val_steps/--max_test_steps`（算力受限时用于快速对照；已覆盖 forecast/imputation/anomaly/classification/zero-shot test）
 
 当前 WVEmbs 频率集合采用 RoPE 风格的确定性对数频率（log-spaced）作为最小基线；已实现训练期的频域掩码增强（zero/arcsine/phase-rotate + dlow\_limited）。此外提供了**最小版联合谱采样（JSS）**与**相位缩放外推（direct/scale）**开关，用于对齐论文中的方法组件与消融需求。
 
@@ -91,7 +92,9 @@ python scripts/wvembs/smoke_tasks.py --wv_mask_prob 1 --wv_mask_type arcsine
 
 ## 最小训练（需要数据集）
 
-下载并放置数据集到 `./dataset` 后，可参考 README 的 quick test，把 `--embed` 换成 `wv_timeF` 并减小规模以适配小 GPU：
+在本仓库中，若本地 `root_path/data_path` 不存在，部分数据集 loader（ETT/Custom/PSM/SWaT 等）会尝试通过 `huggingface_hub` 从 HF 数据集仓库 `thuml/Time-Series-Library` 自动下载对应 CSV；若网络/SSL 受限，请手动将文件放到本地目录（例如 `./dataset/ETT-small/ETTh1.csv`）。
+
+准备好数据后，可参考 README 的 quick test，把 `--embed` 换成 `wv_timeF` 并减小规模以适配小 GPU：
 
 ```bash
 python -u run.py \
@@ -102,16 +105,74 @@ python -u run.py \
   --enc_in 7 --dec_in 7 --c_out 7 \
   --d_model 64 --d_ff 128 --n_heads 4 --e_layers 2 --d_layers 1 \
   --train_epochs 1 --batch_size 8 --num_workers 2 \
+  --max_train_steps 50 --max_val_steps 10 --max_test_steps 10 \
   --embed wv_timeF \
   --itr 1
 ```
 
 对照实验只需将 `--embed wv_timeF` 改回 `--embed timeF`。
 
+#### 离线 toy 数据（custom）快速验证（无需下载任何公开数据）
+
+当 HF 自动下载不可用（例如网络/SSL 问题）时，可用一个很小的 `custom` CSV 验证“数据管线 + 训练/测试 + WVEmbs 透传”是否完整跑通：
+
+```bash
+mkdir -p /tmp/wvembs_toy
+python - <<'PY'
+import pandas as pd, numpy as np
+from datetime import datetime, timedelta
+
+n = 2000
+start = datetime(2020, 1, 1)
+dates = [start + timedelta(hours=i) for i in range(n)]
+t = np.arange(n)
+rng = np.random.default_rng(0)
+df = pd.DataFrame({
+    "date": [d.strftime("%Y-%m-%d %H:%M:%S") for d in dates],
+    "f1": np.sin(t / 24 * 2 * np.pi),
+    "f2": np.cos(t / 24 * 2 * np.pi),
+    "OT": np.sin(t / 50 * 2 * np.pi) + 0.05 * rng.standard_normal(n),
+})
+df.to_csv("/tmp/wvembs_toy/toy.csv", index=False)
+print("saved:", "/tmp/wvembs_toy/toy.csv", "rows=", len(df))
+PY
+```
+
+示例（Autoformer，`features=M` 因此 `enc_in/dec_in/c_out=3`）：
+
+```bash
+python -u run.py \
+  --task_name long_term_forecast --is_training 1 \
+  --root_path /tmp/wvembs_toy/ --data_path toy.csv \
+  --model_id wvembs_toy --model Autoformer --data custom --features M --target OT \
+  --freq h --seq_len 96 --label_len 48 --pred_len 96 \
+  --enc_in 3 --dec_in 3 --c_out 3 \
+  --d_model 32 --d_ff 64 --n_heads 4 --e_layers 2 --d_layers 1 \
+  --train_epochs 1 --batch_size 4 --num_workers 0 \
+  --max_train_steps 1 --max_val_steps 1 --max_test_steps 1 \
+  --embed wv_timeF --checkpoints ./checkpoints_wvembs/ --no_use_gpu \
+  --itr 1
+```
+
+### Fast dev run 记录（仅验证流程，不代表结论）
+
+> 2026-03-02：ETTh1 + Transformer（CPU），`train_epochs=1` 但限制 `max_train_steps=2/max_val_steps=1/max_test_steps=1`，用于快速验证“能训练 + 能测试 + 能输出指标”。
+
+- `embed=timeF`：MSE=1.3888828，MAE=0.8271001
+- `embed=wv_timeF`：MSE=2.0715535，MAE=1.0934823
+
+备注：该记录仅用于确认代码路径与可复现命令无误；由于训练步数极少，指标波动很大，不应用于判断 WVEmbs 的真实收益。
+
+> 2026-03-02：离线 toy 数据（`data=custom`，CPU），`max_train_steps=1/max_val_steps=1/max_test_steps=1`，用于验证更多 backbone 的 WV 参数透传与训练/测试流程（指标无意义，只看“能跑通”）。
+
+- Autoformer（`embed=wv_timeF,label_len=48`）：MSE=1.8680178，MAE=1.1670070
+- FEDformer（`embed=wv_timeF,label_len=48`）：MSE=1.5518832，MAE=1.0816071
+- MICN（`embed=wv_timeF,label_len=96`）：MSE=1.4754682，MAE=1.0594077（注意 MICN 官方脚本默认 `label_len=seq_len`）
+
 ## 下一步实验建议（先做 backbone 提升验证）
 
 建议先固定数据集与训练预算（例如 ETTh1 / `seq_len=96,pred_len=96` / `d_model=64` / 1~3 epoch），对比：
-- Backbone：`Transformer` / `Informer` / `TimesNet`
+- Backbone：`Transformer` / `Informer` / `TimesNet` / `Autoformer` / `FEDformer`
 - Embed：`timeF` vs `wv_timeF`
 
 对应的最小预算脚本：
