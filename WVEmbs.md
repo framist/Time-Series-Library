@@ -29,7 +29,7 @@ WVEmbs 的核心是把连续物理量视为值域上的 Dirac 测度 \(\delta_x\
 - `models/TemporalFusionTransformer.py`：同步修正 `timeF` 判定（避免 `wv_timeF` 被误判）
 - `exp/exp_basic.py`：设备选择更稳健（CUDA/MPS 不可用时自动回退 CPU，并同步 `args.use_gpu/args.device`）
 
-当前 WVEmbs 频率集合采用 RoPE 风格的确定性对数频率（log-spaced）作为最小基线；掩码增强（zero/arcsine/phase-rotate）与联合谱采样（JSS）暂未在代码里展开。
+当前 WVEmbs 频率集合采用 RoPE 风格的确定性对数频率（log-spaced）作为最小基线；已实现训练期的频域掩码增强（zero/arcsine/phase-rotate + dlow\_limited）。联合谱采样（JSS）与值域外推策略仍待在代码里展开。
 
 ## 最小跑通（无需数据集的 smoke test）
 
@@ -40,6 +40,36 @@ python scripts/wvembs/smoke_forward.py
 ```
 
 默认会对 `Transformer,Informer,TimesNet` 用 `--embed wv_timeF` 做一次随机输入的前向与反传。
+
+如果需要顺便覆盖“掩码增强”的代码路径，可加参数，例如：
+
+```bash
+python scripts/wvembs/smoke_forward.py --models Transformer --wv_mask_prob 1 --wv_mask_type phase_rotate
+```
+
+## 多任务 smoke test（无需数据集）
+
+用于覆盖更多任务分支（forecast/imputation/anomaly/classification）：
+
+```bash
+python scripts/wvembs/smoke_tasks.py
+```
+
+同样支持掩码参数，例如：
+
+```bash
+python scripts/wvembs/smoke_tasks.py --wv_mask_prob 1 --wv_mask_type arcsine
+```
+
+## 频域掩码增强（Masking）
+
+掩码只在训练阶段生效（推理时自动关闭），对应论文中 “Frequency Masking / Phase Rotate Masking”。
+
+已接入 `run.py` 参数（默认全部关闭）：
+- `--wv_mask_prob`：每个样本启用掩码的概率
+- `--wv_mask_type`：`none|zero|arcsine|phase_rotate`
+- `--wv_mask_phi_max`：`phase_rotate` 的最大相位扰动（弧度），默认 \(\pi/8\)
+- `--wv_mask_dlow_min`：dlow 下界；0 表示覆盖全频段，>0 表示限制只掩码更低频尾部（对应 dlow\_limited 变体）
 
 ## 最小训练（需要数据集）
 
@@ -66,9 +96,20 @@ python -u run.py \
 - Backbone：`Transformer` / `Informer` / `TimesNet`
 - Embed：`timeF` vs `wv_timeF`
 
+对应的最小预算脚本：
+- `scripts/wvembs/forecast_etth1_backbones.sh`
+- `scripts/wvembs/forecast_etth1_mask_ablation.sh`（mask 消融 + dlow\_limited 示例）
+
 记录口径：
 - 训练/验证/测试的 MSE、MAE（TSLib 默认输出）
 - 训练耗时与显存占用（如果需要可后续补）
+
+## 各任务最小脚本（需要数据集）
+
+- Forecast（ETTh1）：`scripts/wvembs/forecast_etth1_backbones.sh`
+- Imputation（ETTh1）：`scripts/wvembs/imputation_etth1_quick.sh`
+- Anomaly Detection（PSM）：`scripts/wvembs/anomaly_psm_quick.sh`
+- Classification（Heartbeat/UEA）：`scripts/wvembs/classification_heartbeat_quick.sh`
 
 ## 备注（与“分布无关”目标的差距）
 

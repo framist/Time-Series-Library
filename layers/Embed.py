@@ -141,14 +141,21 @@ class WVLiftEmbedding(nn.Module):
     3) 形状对齐投影：将 [M*D] 投影回主干网络期望的 `d_model`
     """
 
-    def __init__(self, c_in, d_model, dropout=0.1, base=10000.0):
+    def __init__(self, c_in, d_model, dropout=0.1, base=10000.0, wv_cfg=None):
         super(WVLiftEmbedding, self).__init__()
         wv_dim = d_model if (d_model % 2 == 0) else (d_model + 1)
         self.wv_dim = wv_dim
         self.c_in = c_in
         self.d_model = d_model
 
-        self.wv = WVEmbs(dim=wv_dim, base=base)
+        wv_base = float(getattr(wv_cfg, "wv_base", base)) if wv_cfg is not None else base
+        self.wv = WVEmbs(dim=wv_dim, base=wv_base)
+
+        self.mask_prob = float(getattr(wv_cfg, "wv_mask_prob", 0.0)) if wv_cfg is not None else 0.0
+        self.mask_type = str(getattr(wv_cfg, "wv_mask_type", "none")) if wv_cfg is not None else "none"
+        self.mask_phi_max = float(getattr(wv_cfg, "wv_mask_phi_max", math.pi / 8)) if wv_cfg is not None else (math.pi / 8)
+        self.mask_dlow_min = int(getattr(wv_cfg, "wv_mask_dlow_min", 0)) if wv_cfg is not None else 0
+
         self.var_mixer = nn.Identity() if c_in <= 1 else nn.Sequential(
             nn.Linear(c_in, c_in),
             nn.GELU(),
@@ -156,9 +163,67 @@ class WVLiftEmbedding(nn.Module):
         )
         self.proj = nn.Linear(c_in * wv_dim, d_model)
 
+    def _apply_freq_mask(self, z):
+        """
+        频域掩码增强（仅训练阶段生效）。
+
+        参数来自 `args`：
+        - `wv_mask_prob`
+        - `wv_mask_type`: none/zero/arcsine/phase_rotate
+        - `wv_mask_phi_max`
+        - `wv_mask_dlow_min`（dlow_limited 变体）
+        """
+        if (not self.training) or (self.mask_prob <= 0) or (self.mask_type in ("none", "None", "")):
+            return z
+
+        if z.shape[-1] % 2 != 0:
+            raise ValueError(f"WVEmbs 输出维度必须为偶数，但得到 {z.shape[-1]}")
+
+        bsz, t, m, dim = z.shape
+        k = dim // 2
+
+        z_pairs = z.view(bsz, t, m, k, 2)
+        device = z.device
+
+        apply = torch.rand((bsz,), device=device) < self.mask_prob  # [B]
+        if not apply.any():
+            return z
+
+        dlow_min = max(0, min(self.mask_dlow_min, k))
+        d_low = torch.randint(dlow_min, k + 1, (bsz,), device=device)  # [B], inclusive k
+
+        freq_mask = torch.arange(k, device=device).unsqueeze(0) >= d_low.unsqueeze(1)  # [B,K]
+        freq_mask = freq_mask & apply.unsqueeze(1)
+        if not freq_mask.any():
+            return z
+
+        freq_mask = freq_mask[:, None, None, :, None]  # [B,1,1,K,1]
+
+        if self.mask_type == "zero":
+            z_pairs = torch.where(freq_mask, torch.zeros(1, device=device, dtype=z_pairs.dtype), z_pairs)
+        elif self.mask_type == "arcsine":
+            phi = torch.rand((bsz, t, m, k), device=device) * (2 * math.pi)
+            repl = torch.stack((phi.cos(), phi.sin()), dim=-1).to(dtype=z_pairs.dtype)
+            z_pairs = torch.where(freq_mask, repl, z_pairs)
+        elif self.mask_type == "phase_rotate":
+            delta = (torch.rand((bsz, t, m, k), device=device) * 2 - 1) * self.mask_phi_max
+            cos_d = delta.cos().to(dtype=z_pairs.dtype)
+            sin_d = delta.sin().to(dtype=z_pairs.dtype)
+
+            cos, sin = z_pairs[..., 0], z_pairs[..., 1]
+            rot_cos = cos * cos_d - sin * sin_d
+            rot_sin = sin * cos_d + cos * sin_d
+            repl = torch.stack((rot_cos, rot_sin), dim=-1)
+            z_pairs = torch.where(freq_mask, repl, z_pairs)
+        else:
+            raise ValueError(f"未知 wv_mask_type={self.mask_type!r}，可选 none/zero/arcsine/phase_rotate")
+
+        return z_pairs.view(bsz, t, m, dim)
+
     def forward(self, x):
         # x: [B, T, M]
         z = self.wv(x)  # [B, T, M, wv_dim]
+        z = self._apply_freq_mask(z)
         z = z.permute(0, 1, 3, 2)  # [B, T, wv_dim, M]
         z = self.var_mixer(z)
         z = z.permute(0, 1, 3, 2)  # [B, T, M, wv_dim]
@@ -167,12 +232,12 @@ class WVLiftEmbedding(nn.Module):
 
 
 class DataEmbedding(nn.Module):
-    def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
+    def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1, wv_cfg=None):
         super(DataEmbedding, self).__init__()
 
         time_embed_type, value_embed_type = parse_embed_arg(embed_type)
 
-        self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout) \
+        self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout, wv_cfg=wv_cfg) \
             if value_embed_type == 'wv' else TokenEmbedding(c_in=c_in, d_model=d_model)
         self.position_embedding = PositionalEmbedding(d_model=d_model)
         self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=time_embed_type,
@@ -207,12 +272,12 @@ class DataEmbedding_inverted(nn.Module):
 
 
 class DataEmbedding_wo_pos(nn.Module):
-    def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
+    def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1, wv_cfg=None):
         super(DataEmbedding_wo_pos, self).__init__()
 
         time_embed_type, value_embed_type = parse_embed_arg(embed_type)
 
-        self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout) \
+        self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout, wv_cfg=wv_cfg) \
             if value_embed_type == 'wv' else TokenEmbedding(c_in=c_in, d_model=d_model)
         self.position_embedding = PositionalEmbedding(d_model=d_model)
         self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=time_embed_type,

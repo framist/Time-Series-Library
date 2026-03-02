@@ -36,6 +36,12 @@ def _make_common_configs(model_name: str) -> Namespace:
         embed="wv_timeF",
         freq="h",
         dropout=0.1,
+        # WVEmbs masking（默认关闭；由 CLI 覆盖）
+        wv_base=10000.0,
+        wv_mask_prob=0.0,
+        wv_mask_type="none",
+        wv_mask_phi_max=3.141592653589793 / 8,
+        wv_mask_dlow_min=0,
         # backbone（Transformer/Informer/TimesNet）
         d_model=64,
         n_heads=4,
@@ -78,6 +84,16 @@ def main():
         default="Transformer,Informer,TimesNet",
         help="Comma-separated model names to smoke-test: Transformer, Informer, TimesNet",
     )
+    parser.add_argument("--wv_mask_prob", type=float, default=0.0, help="WVEmbs 掩码概率，0 关闭")
+    parser.add_argument(
+        "--wv_mask_type",
+        type=str,
+        default="none",
+        choices=["none", "zero", "arcsine", "phase_rotate"],
+        help="WVEmbs 掩码类型",
+    )
+    parser.add_argument("--wv_mask_phi_max", type=float, default=3.141592653589793 / 8, help="phase_rotate 扰动上限（弧度）")
+    parser.add_argument("--wv_mask_dlow_min", type=int, default=0, help="dlow 下界（dlow_limited 变体）")
     args = parser.parse_args()
 
     model_names = [x.strip() for x in args.models.split(",") if x.strip()]
@@ -86,6 +102,10 @@ def main():
 
     for name in model_names:
         cfg = _make_common_configs(name)
+        cfg.wv_mask_prob = args.wv_mask_prob
+        cfg.wv_mask_type = args.wv_mask_type
+        cfg.wv_mask_phi_max = args.wv_mask_phi_max
+        cfg.wv_mask_dlow_min = args.wv_mask_dlow_min
         if name == "Transformer":
             from models.Transformer import Model as ModelCls
         elif name == "Informer":

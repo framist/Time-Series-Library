@@ -80,6 +80,19 @@ if __name__ == '__main__':
     parser.add_argument('--seg_len', type=int, default=96,
                         help='the length of segmen-wise iteration of SegRNN')
 
+    # WVEmbs / WV-Lift
+    parser.add_argument('--wv_base', type=float, default=10000.0,
+                        help='WVEmbs 频率基底（RoPE 风格对数频率）')
+    parser.add_argument('--wv_mask_prob', type=float, default=0.0,
+                        help='WVEmbs 频域掩码概率，0 表示关闭')
+    parser.add_argument('--wv_mask_type', type=str, default='none',
+                        choices=['none', 'zero', 'arcsine', 'phase_rotate'],
+                        help='WVEmbs 频域掩码类型')
+    parser.add_argument('--wv_mask_phi_max', type=float, default=3.141592653589793 / 8,
+                        help='phase_rotate 最大相位扰动（弧度），默认 π/8')
+    parser.add_argument('--wv_mask_dlow_min', type=int, default=0,
+                        help='dlow 下界：0 覆盖全频段；>0 限制只掩码更低频尾部（dlow_limited 变体）')
+
     # optimization
     parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
     parser.add_argument('--itr', type=int, default=1, help='experiments times')

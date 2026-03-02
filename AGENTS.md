@@ -21,12 +21,14 @@
 - 代码入口：`layers/Embed.py` 新增 `WVEmbs` / `WVLiftEmbedding`，并在 `DataEmbedding` / `DataEmbedding_wo_pos` 内自动切换 value embedding。
 - 数据时间特征：`data_provider/data_factory.py` 必须用解析后的 `time_embed_type` 判定 `timeenc`，否则 `wv_timeF` 会被误判为“非 timeF”，导致时间特征维度不匹配。
 - Smoke test：`scripts/wvembs/smoke_forward.py`（随机输入前向 + 反传，快速验证“能跑通”）。
+- 多任务 smoke：`scripts/wvembs/smoke_tasks.py`（forecast/imputation/anomaly/classification 随机输入覆盖）。
 - 设备稳健性：`exp/exp_basic.py` 在 CUDA/MPS 不可用时自动回退 CPU，并同步 `args.use_gpu` / `args.device`，避免无 GPU 环境直接崩溃。
+  - 掩码增强参数（训练期生效）：`--wv_mask_prob` / `--wv_mask_type` / `--wv_mask_phi_max` / `--wv_mask_dlow_min`。
 
 
 ## TODO（后续实验/实现）
 
-- 频域掩码增强（zero / arcsine / phase_rotate）与外推策略（direct / scale 等）
+- 值域外推策略（direct / scale 等）与对应实验脚本
 - 多通道联合谱采样（JSS）与相关性先验注入
 - 关闭/替换 `StandardScaler`（更贴近“分布无关”数据管线）
 - 按 backbone 做对照：Transformer / Informer / TimesNet / iTransformer / PatchTST 等
