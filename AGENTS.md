@@ -85,6 +85,16 @@
 - ⏳ Cycle 2-6 尚未完成（多 backbone、多数据集扩展、JSS 深化、掩码/外推、超参调优与最终套件）
 - ⚠️ 需要修订：`scripts/wvembs/run_final_suite.sh` 当前的 `WV_SAMPLING`/ECL prior 默认值与 `Report.md` 的“最终表”口径不一致（需更新后才能做到一键复现）。
 
+### Cycle 2 发现：WV 参数与 backbone 强交互（2026-03-05）
+
+- Forecast（ETTh1）：
+  - Nonstationary_Transformer：默认配置下 `wv_timeF(jss,std=1.0)`/`wv(iss)` 会大幅退化；但 `wv(jss,std=0.25)` 与 `wv_timeF(jss,std=0.25)` 可恢复并优于 `timeF`（见 `scripts/wvembs/forecast_etth1_tune_wv_params.sh` 与 Report 对应表）。
+  - Autoformer：`wv_timeF(iss)` 在同预算下显著优于 `timeF`；`wv_timeF(jss)` 则明显退化。
+  - TimesNet：在本预算下仍更偏好 `timeF`；调小 `wv_base` 可略微缓解退化但不足以反超。
+- Imputation（ETTh1, TimesNet）：
+  - `wv_sampling=iss` 明显优于 `jss`（`jss_std=0.25` 在该任务上会显著变差）。
+  - `wv_base` 从 `1e4` 调到 `1e2~1e3` 可进一步改善 `wv`（但仍略落后于 `timeF` 基线）。
+
 
 ## Plan: WVEmbs 全流程实验（迭代循环）
 
