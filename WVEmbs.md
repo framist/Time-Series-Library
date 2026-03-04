@@ -220,12 +220,15 @@ python -u run.py \
 - Forecast（ETTh1 + no\_scale）：`scripts/wvembs/forecast_etth1_noscale.sh`
 - Forecast（ETTh1 + 阶段0 embed 对照）：`scripts/wvembs/forecast_etth1_stage0_embed_compare.sh`
 - Forecast（ETTh1 + 阶段0/1核心四组对照）：`scripts/wvembs/forecast_etth1_stage01_core.sh`
+- Forecast（ETTh1 + 多-backbone 对照）：`scripts/wvembs/forecast_etth1_multi_backbone.sh`
+- Forecast（ETTh1 + WV 参数最小调优）：`scripts/wvembs/forecast_etth1_tune_wv_params.sh`
 - Forecast（ETTm1 + 阶段0 embed 对照）：`scripts/wvembs/forecast_ettm1_stage0_embed_compare.sh`
 - Forecast（ETTm1 + 阶段0/1核心四组对照）：`scripts/wvembs/forecast_ettm1_stage01_core.sh`
 - Forecast（ETTh1 + ISS vs JSS）：`scripts/wvembs/forecast_etth1_jss.sh`
 - Imputation（ETTh1）：`scripts/wvembs/imputation_etth1_quick.sh`
 - Imputation（ETTh1 + 阶段0 embed 对照）：`scripts/wvembs/imputation_etth1_stage0_embed_compare.sh`
 - Imputation（ETTh1 + 阶段0/1核心四组对照）：`scripts/wvembs/imputation_etth1_stage01_core.sh`
+- Imputation（ETTh1 + 多-backbone 对照）：`scripts/wvembs/imputation_etth1_multi_backbone.sh`
 - Imputation（ETTm1 + 阶段0 embed 对照）：`scripts/wvembs/imputation_ettm1_stage0_embed_compare.sh`
 - Imputation（ETTm1 + 阶段0/1核心四组对照）：`scripts/wvembs/imputation_ettm1_stage01_core.sh`
 - Anomaly Detection（PSM）：`scripts/wvembs/anomaly_psm_quick.sh`
