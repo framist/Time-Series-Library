@@ -72,8 +72,9 @@ class Exp_Imputation(Exp_Basic):
                 batch_x = batch_x[:, :, f_dim:]
                 mask = mask[:, :, f_dim:]
 
-                pred = outputs.detach()
-                true = batch_x.detach()
+                # AMP 训练时 outputs 可能为 float16；这里统一转为 float32 计算 loss，避免 dtype 不一致导致反传报错
+                pred = outputs.detach().float()
+                true = batch_x.detach().float()
                 mask = mask.detach()
 
                 loss = criterion(pred[mask == 0], true[mask == 0])
@@ -137,7 +138,8 @@ class Exp_Imputation(Exp_Basic):
                 batch_x = batch_x[:, :, f_dim:]
                 mask = mask[:, :, f_dim:]
 
-                loss = criterion(outputs[mask == 0], batch_x[mask == 0])
+                # 同 vali：用 float32 计算 loss，避免 mixed dtype 的反传问题
+                loss = criterion(outputs.float()[mask == 0], batch_x.float()[mask == 0])
                 train_loss_sum += loss.detach().float()
                 train_loss_count += 1
 

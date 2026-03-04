@@ -78,6 +78,13 @@
 - 峰值显存（nvidia-smi 轮询）：`~869 MB`
   - 结果目录：`results/gpu_probe_etth1_20260305_010832/`
 
+### 进度核对（对照 Cycle 0-6）
+
+- ✅ Cycle 0 已完成（数据补齐、prior_scale 粗估、GPU 预算探测；已提交到 PG 分支）
+- ✅ Cycle 1 已完成（补齐 ETTm1 forecast/imputation + PSM/Heartbeat 的 `embed=wv`；Report 已更新并提交）
+- ⏳ Cycle 2-6 尚未完成（多 backbone、多数据集扩展、JSS 深化、掩码/外推、超参调优与最终套件）
+- ⚠️ 需要修订：`scripts/wvembs/run_final_suite.sh` 当前的 `WV_SAMPLING`/ECL prior 默认值与 `Report.md` 的“最终表”口径不一致（需更新后才能做到一键复现）。
+
 
 ## Plan: WVEmbs 全流程实验（迭代循环）
 

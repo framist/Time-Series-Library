@@ -111,8 +111,10 @@ class AutoCorrelation(nn.Module):
             keys = keys[:, :L, :, :]
 
         # period-based dependencies
-        q_fft = torch.fft.rfft(queries.permute(0, 2, 3, 1).contiguous(), dim=-1)
-        k_fft = torch.fft.rfft(keys.permute(0, 2, 3, 1).contiguous(), dim=-1)
+        # AMP 下若输入为 float16，cuFFT 仅支持 2^n 的长度；否则会报错（例如 L=96/192）。
+        # 这里统一在 FFT 前转为 float32，保证任意长度都可稳定运行。
+        q_fft = torch.fft.rfft(queries.permute(0, 2, 3, 1).contiguous().float(), dim=-1)
+        k_fft = torch.fft.rfft(keys.permute(0, 2, 3, 1).contiguous().float(), dim=-1)
         res = q_fft * torch.conj(k_fft)
         corr = torch.fft.irfft(res, dim=-1)
 

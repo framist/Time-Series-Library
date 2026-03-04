@@ -1,5 +1,7 @@
 # WVEmbs（Wide Value Embedding）在 TSLib 的最小跑通记录
 
+> 更新时间：2026-03-05
+
 ## 背景速记（对齐论文表述）
 
 WVEmbs 的核心是把连续物理量视为值域上的 Dirac 测度 \(\delta_x\)，其在对偶谱上的特征函数为 \(\chi_\omega(x)=e^{-i\omega x}\)。用一组有限谱点 \(\{\omega_k\}\) 采样该特征函数即可得到分布无关的嵌入；工程实现上用实值向量拼接 \([\cos(\omega_k x),\ \sin(\omega_k x)]\) 表示复频域特征。
@@ -97,6 +99,12 @@ TODO 注意：如果后端网络原生支持多通道 Embs 输入，则不使用
 
 在本仓库中，若本地 `root_path/data_path` 不存在，部分数据集 loader（ETT/Custom/PSM/SWaT 等）会尝试通过 `huggingface_hub` 从 HF 数据集仓库 `thuml/Time-Series-Library` 自动下载对应 CSV；若网络/SSL 受限，请手动将文件放到本地目录（例如 `./dataset/ETT-small/ETTh1.csv`）。
 
+Cycle 0 起补充了“下载并落盘”的脚本（推荐用于离线复现与迁移）：
+
+```bash
+conda run -n radio python scripts/wvembs/download_datasets.py --all
+```
+
 准备好数据后，可参考 README 的 quick test，把 `--embed` 换成 `wv`（统一模式）并减小规模以适配小 GPU：
 
 ```bash
@@ -172,17 +180,23 @@ python -u run.py \
 - FEDformer（`embed=wv_timeF,label_len=48`）：MSE=1.5518832，MAE=1.0816071
 - MICN（`embed=wv_timeF,label_len=96`）：MSE=1.4754682，MAE=1.0594077（注意 MICN 官方脚本默认 `label_len=seq_len`）
 
-## 阶段 0/1 最终结论（2026-03-04）
+## 阶段 0/1 最终结论（2026-03-05）
 
 - 对齐上游口径：
   - 阶段 0（embed 对照）：不传 `--inverse`（指标在缩放空间，对齐 `scripts/*/ETT_script/*.sh` 默认）
   - 阶段 1（scale_mode 对照）：显式传 `--inverse`（把 `standard/prior/none` 的指标统一回原始物理量尺度）
 - 最终结果与表格：见 `Report.md`（该文件只保留最终结果，不包含弃用/最小预算尝试）
+- 当前已覆盖的真实数据集与任务：
+  - Forecast：ETTh1、ETTm1、Electricity(ECL)
+  - Imputation：ETTh1、ETTm1
+  - Anomaly：PSM
+  - Classification：UEA/Heartbeat
 - 关键发现（供后续阶段 2/3 设计超参扫描时参考）：
   - ETTh1 forecast 上，`wv_timeF` 在 `wv_sampling=jss` 下显著优于 `timeF`
   - `wv` 统一模式与 `wv_sampling` 有强交互：在 ETTh1 forecast 上 `wv_sampling=iss` 能显著改善 `wv`，但 `jss` 可能导致退化（需要解释原因并形成统一默认）
   - `scale_mode=none` 的“基线崩溃”并非在所有数据集上成立：ETTh1 不崩溃，但 Electricity(ECL) 上 `no_scale+timeF` 会出现 NaN
   - prior 的“物理先验”仍待补齐：ETT 目前用训练段 `max(abs(x))×slack` 做初始化；ECL 上 `prior_scale` 对结果非常敏感（目前观察到 `target=OT` 时 `prior_scale≈5000` 明显优于 `1e5` 量级），需要更稳健且可解释的先验设定流程
+  - anomaly/classification 任务通常没有显式时间特征（`x_mark=None`），因此 `embed=wv` 更像是“值 WVEmbs + 额外零时间通道”的补齐项；脚本里已明确标注该解释。
 
 ## 下一步实验建议（先做 backbone 提升验证）
 
@@ -200,6 +214,8 @@ python -u run.py \
 
 ## 各任务最小脚本（需要数据集）
 
+- 数据集下载落盘：`scripts/wvembs/download_datasets.py`
+- GPU 预算探测（ETTh1 forecast）：`scripts/wvembs/gpu_budget_probe_etth1.sh`
 - Forecast（ETTh1）：`scripts/wvembs/forecast_etth1_backbones.sh`
 - Forecast（ETTh1 + no\_scale）：`scripts/wvembs/forecast_etth1_noscale.sh`
 - Forecast（ETTh1 + 阶段0 embed 对照）：`scripts/wvembs/forecast_etth1_stage0_embed_compare.sh`
@@ -214,8 +230,10 @@ python -u run.py \
 - Imputation（ETTm1 + 阶段0/1核心四组对照）：`scripts/wvembs/imputation_ettm1_stage01_core.sh`
 - Anomaly Detection（PSM）：`scripts/wvembs/anomaly_psm_quick.sh`
 - Anomaly Detection（PSM + scale_mode 对照）：`scripts/wvembs/anomaly_psm_stage01_scale_compare.sh`
+- Anomaly Detection（PSM + 补齐 embed=wv）：`scripts/wvembs/anomaly_psm_stage01_add_wv.sh`
 - Classification（Heartbeat/UEA）：`scripts/wvembs/classification_heartbeat_quick.sh`
 - Classification（Heartbeat/UEA + scale_mode 对照）：`scripts/wvembs/classification_heartbeat_stage01_scale_compare.sh`
+- Classification（Heartbeat/UEA + 补齐 embed=wv）：`scripts/wvembs/classification_heartbeat_stage01_add_wv.sh`
 
 ## 备注（与“分布无关”目标的差距）
 

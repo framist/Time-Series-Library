@@ -8,7 +8,9 @@ from layers.Conv_Blocks import Inception_Block_V1
 
 def FFT_for_Period(x, k=2):
     # [B, T, C]
-    xf = torch.fft.rfft(x, dim=1)
+    # AMP 下若 x 为 float16，cuFFT 只支持 2^n 长度的信号；否则会直接报错。
+    # 这里统一在 FFT 前转为 float32，保证任意长度（例如 96/192）都可稳定运行。
+    xf = torch.fft.rfft(x.float(), dim=1)
     # find period by amplitudes
     frequency_list = abs(xf).mean(0).mean(-1)
     frequency_list[0] = 0
