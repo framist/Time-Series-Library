@@ -146,3 +146,14 @@ def time_features_from_frequency_str(freq_str: str) -> List[TimeFeature]:
 
 def time_features(dates, freq='h'):
     return np.vstack([feat(dates) for feat in time_features_from_frequency_str(freq)])
+
+
+def time_features_dim(freq: str) -> int:
+    """
+    返回 `time_features(..., freq=...)` 生成的时间特征维度。
+
+    说明：
+    - 该维度应与数据侧 `timeenc=1` 时生成的 `x_mark` 最后一维一致
+    - 支持更细粒度的频率字符串（例如 "15min" / "3h"），与 pandas 的 `to_offset` 解析保持一致
+    """
+    return len(time_features_from_frequency_str(freq))

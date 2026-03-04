@@ -40,12 +40,14 @@ class Exp_Imputation(Exp_Basic):
         total_loss = []
         self.model.eval()
         max_val_steps = getattr(self.args, 'max_val_steps', -1)
+        use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
+        non_blocking = (self.device.type == "cuda")
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
                 if max_val_steps > 0 and i >= max_val_steps:
                     break
-                batch_x = batch_x.float().to(self.device)
-                batch_x_mark = batch_x_mark.float().to(self.device)
+                batch_x = batch_x.float().to(self.device, non_blocking=non_blocking)
+                batch_x_mark = batch_x_mark.float().to(self.device, non_blocking=non_blocking)
 
                 # random mask
                 B, T, N = batch_x.shape
@@ -59,7 +61,8 @@ class Exp_Imputation(Exp_Basic):
                 mask[mask > self.args.mask_rate] = 1  # remained
                 inp = batch_x.masked_fill(mask == 0, 0)
 
-                outputs = self.model(inp, batch_x_mark, None, None, mask)
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    outputs = self.model(inp, batch_x_mark, None, None, mask)
 
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, :, f_dim:]
@@ -94,6 +97,9 @@ class Exp_Imputation(Exp_Basic):
 
         model_optim = self._select_optimizer()
         criterion = self._select_criterion()
+        use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
+        non_blocking = (self.device.type == "cuda")
+        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
         for epoch in range(self.args.train_epochs):
             iter_count = 0
@@ -108,8 +114,8 @@ class Exp_Imputation(Exp_Basic):
                 iter_count += 1
                 model_optim.zero_grad()
 
-                batch_x = batch_x.float().to(self.device)
-                batch_x_mark = batch_x_mark.float().to(self.device)
+                batch_x = batch_x.float().to(self.device, non_blocking=non_blocking)
+                batch_x_mark = batch_x_mark.float().to(self.device, non_blocking=non_blocking)
 
                 # random mask
                 B, T, N = batch_x.shape
@@ -118,7 +124,8 @@ class Exp_Imputation(Exp_Basic):
                 mask[mask > self.args.mask_rate] = 1  # remained
                 inp = batch_x.masked_fill(mask == 0, 0)
 
-                outputs = self.model(inp, batch_x_mark, None, None, mask)
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    outputs = self.model(inp, batch_x_mark, None, None, mask)
 
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, :, f_dim:]
@@ -138,8 +145,13 @@ class Exp_Imputation(Exp_Basic):
                     iter_count = 0
                     time_now = time.time()
 
-                loss.backward()
-                model_optim.step()
+                if use_amp:
+                    scaler.scale(loss).backward()
+                    scaler.step(model_optim)
+                    scaler.update()
+                else:
+                    loss.backward()
+                    model_optim.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
@@ -174,12 +186,14 @@ class Exp_Imputation(Exp_Basic):
 
         self.model.eval()
         max_test_steps = getattr(self.args, 'max_test_steps', -1)
+        use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
+        non_blocking = (self.device.type == "cuda")
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
                 if max_test_steps > 0 and i >= max_test_steps:
                     break
-                batch_x = batch_x.float().to(self.device)
-                batch_x_mark = batch_x_mark.float().to(self.device)
+                batch_x = batch_x.float().to(self.device, non_blocking=non_blocking)
+                batch_x_mark = batch_x_mark.float().to(self.device, non_blocking=non_blocking)
 
                 # random mask
                 B, T, N = batch_x.shape
@@ -189,27 +203,33 @@ class Exp_Imputation(Exp_Basic):
                 inp = batch_x.masked_fill(mask == 0, 0)
 
                 # imputation
-                outputs = self.model(inp, batch_x_mark, None, None, mask)
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    outputs = self.model(inp, batch_x_mark, None, None, mask)
 
-                # eval
                 f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, :, f_dim:]
 
-                # add support for MS 
-                batch_x = batch_x[:, :, f_dim:]
+                pred = outputs.detach().float().cpu().numpy()
+                true = batch_x.detach().float().cpu().numpy()
+                mask = mask.detach().cpu().numpy()
+
+                if test_data.scale and self.args.inverse:
+                    shape = true.shape
+                    if pred.shape[-1] != true.shape[-1]:
+                        pred = np.tile(pred, [1, 1, int(true.shape[-1] / pred.shape[-1])])
+                    pred = test_data.inverse_transform(pred.reshape(shape[0] * shape[1], -1)).reshape(shape)
+                    true = test_data.inverse_transform(true.reshape(shape[0] * shape[1], -1)).reshape(shape)
+
+                pred = pred[:, :, f_dim:]
+                true = true[:, :, f_dim:]
                 mask = mask[:, :, f_dim:]
 
-                outputs = outputs.detach().cpu().numpy()
-                pred = outputs
-                true = batch_x.detach().cpu().numpy()
                 preds.append(pred)
                 trues.append(true)
-                masks.append(mask.detach().cpu())
+                masks.append(mask)
 
                 if i % 20 == 0:
                     filled = true[0, :, -1].copy()
-                    filled = filled * mask[0, :, -1].detach().cpu().numpy() + \
-                             pred[0, :, -1] * (1 - mask[0, :, -1].detach().cpu().numpy())
+                    filled = filled * mask[0, :, -1] + pred[0, :, -1] * (1 - mask[0, :, -1])
                     visual(true[0, :, -1], filled, os.path.join(folder_path, str(i) + '.pdf'))
 
         preds = np.concatenate(preds, 0)

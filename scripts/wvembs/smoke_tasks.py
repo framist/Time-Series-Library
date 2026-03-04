@@ -22,12 +22,14 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+from utils.timefeatures import time_features_dim
 
-def _base_cfg(task_name: str) -> Namespace:
+
+def _base_cfg(task_name: str, embed: str) -> Namespace:
     return Namespace(
         task_name=task_name,
         # embedding（启用 WVEmbs）
-        embed="wv_timeF",
+        embed=embed,
         freq="h",
         dropout=0.1,
         wv_base=10000.0,
@@ -61,9 +63,7 @@ def _base_cfg(task_name: str) -> Namespace:
 
 
 def _timeF_dim(freq: str) -> int:
-    # 与 layers/Embed.py 的 freq_map 保持一致
-    freq_map = {"h": 4, "t": 5, "s": 6, "m": 1, "a": 1, "w": 2, "d": 3, "b": 3}
-    return int(freq_map[freq])
+    return int(time_features_dim(freq))
 
 
 def _fake_forecast_batch(cfg: Namespace, batch_size: int):
@@ -83,6 +83,12 @@ def _run_backward(out: torch.Tensor):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=2)
+    parser.add_argument(
+        "--embed",
+        type=str,
+        default="wv",
+        help="embedding 模式：wv（统一时间入通道）或 wv_timeF（消融：时间仍用 TimeFeatureEmbedding）",
+    )
     parser.add_argument("--wv_mask_prob", type=float, default=0.0)
     parser.add_argument(
         "--wv_mask_type",
@@ -112,7 +118,7 @@ def main():
         return cfg
 
     # 1) forecasting
-    cfg = apply_mask_cfg(_base_cfg("long_term_forecast"))
+    cfg = apply_mask_cfg(_base_cfg("long_term_forecast", args.embed))
     model = Transformer(cfg).train()
     x_enc, x_mark_enc, x_dec, x_mark_dec = _fake_forecast_batch(cfg, args.batch_size)
     out = model(x_enc, x_mark_enc, x_dec, x_mark_dec)
@@ -120,7 +126,7 @@ def main():
     print(f"[OK] long_term_forecast out={tuple(out.shape)} embed={cfg.embed} mask={cfg.wv_mask_type}")
 
     # 2) imputation
-    cfg = apply_mask_cfg(_base_cfg("imputation"))
+    cfg = apply_mask_cfg(_base_cfg("imputation", args.embed))
     model = Transformer(cfg).train()
     x_enc, x_mark_enc, x_dec, x_mark_dec = _fake_forecast_batch(cfg, args.batch_size)
     mask = torch.ones(args.batch_size, cfg.seq_len, cfg.enc_in)
@@ -129,7 +135,7 @@ def main():
     print(f"[OK] imputation out={tuple(out.shape)} embed={cfg.embed} mask={cfg.wv_mask_type}")
 
     # 3) anomaly detection
-    cfg = apply_mask_cfg(_base_cfg("anomaly_detection"))
+    cfg = apply_mask_cfg(_base_cfg("anomaly_detection", args.embed))
     model = Transformer(cfg).train()
     x_enc = torch.randn(args.batch_size, cfg.seq_len, cfg.enc_in)
     out = model(x_enc, None, None, None)
@@ -137,7 +143,7 @@ def main():
     print(f"[OK] anomaly_detection out={tuple(out.shape)} embed={cfg.embed} mask={cfg.wv_mask_type}")
 
     # 4) classification
-    cfg = apply_mask_cfg(_base_cfg("classification"))
+    cfg = apply_mask_cfg(_base_cfg("classification", args.embed))
     model = Transformer(cfg).train()
     x_enc = torch.randn(args.batch_size, cfg.seq_len, cfg.enc_in)
     padding_mask = torch.ones(args.batch_size, cfg.seq_len)

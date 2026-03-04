@@ -5,8 +5,8 @@ import glob
 import re
 import torch
 from torch.utils.data import Dataset, DataLoader
-from sklearn.preprocessing import StandardScaler
 from utils.timefeatures import time_features
+from utils.scalers import build_series_scaler, PriorScaler
 from data_provider.m4 import M4Dataset, M4Meta
 from data_provider.uea import subsample, interpolate_missing, Normalizer
 from sktime.datasets import load_from_tsfile_to_dataframe
@@ -59,7 +59,8 @@ class Dataset_ETT_hour(Dataset):
 
         self.features = features
         self.target = target
-        self.scale = scale
+        self.scale_mode = str(getattr(args, "scale_mode", "standard" if scale else "none"))
+        self.scale = (self.scale_mode.lower() != "none")
         self.timeenc = timeenc
         self.freq = freq
 
@@ -68,8 +69,6 @@ class Dataset_ETT_hour(Dataset):
         self.__read_data__()
 
     def __read_data__(self):
-        self.scaler = StandardScaler()
-
         local_fp = os.path.join(self.root_path, self.data_path)
 
         if os.path.exists(local_fp):
@@ -88,12 +87,15 @@ class Dataset_ETT_hour(Dataset):
         elif self.features == 'S':
             df_data = df_raw[[self.target]]
 
-        if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
-            self.scaler.fit(train_data.values)
-            data = self.scaler.transform(df_data.values)
-        else:
-            data = df_data.values
+        train_data = df_data[border1s[0]:border2s[0]].values
+        self.scaler = build_series_scaler(
+            scale_mode=self.scale_mode,
+            train_data=train_data,
+            feature_dim=train_data.shape[1],
+            prior_scale=getattr(self.args, "prior_scale", None),
+            prior_offset=getattr(self.args, "prior_offset", None),
+        )
+        data = self.scaler.transform(df_data.values)
 
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
@@ -157,7 +159,8 @@ class Dataset_ETT_minute(Dataset):
 
         self.features = features
         self.target = target
-        self.scale = scale
+        self.scale_mode = str(getattr(args, "scale_mode", "standard" if scale else "none"))
+        self.scale = (self.scale_mode.lower() != "none")
         self.timeenc = timeenc
         self.freq = freq
 
@@ -166,8 +169,6 @@ class Dataset_ETT_minute(Dataset):
         self.__read_data__()
 
     def __read_data__(self):
-        self.scaler = StandardScaler()
-
         local_fp = os.path.join(self.root_path, self.data_path)
 
         if os.path.exists(local_fp):
@@ -186,12 +187,15 @@ class Dataset_ETT_minute(Dataset):
         elif self.features == 'S':
             df_data = df_raw[[self.target]]
 
-        if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
-            self.scaler.fit(train_data.values)
-            data = self.scaler.transform(df_data.values)
-        else:
-            data = df_data.values
+        train_data = df_data[border1s[0]:border2s[0]].values
+        self.scaler = build_series_scaler(
+            scale_mode=self.scale_mode,
+            train_data=train_data,
+            feature_dim=train_data.shape[1],
+            prior_scale=getattr(self.args, "prior_scale", None),
+            prior_offset=getattr(self.args, "prior_offset", None),
+        )
+        data = self.scaler.transform(df_data.values)
 
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
@@ -257,7 +261,8 @@ class Dataset_Custom(Dataset):
 
         self.features = features
         self.target = target
-        self.scale = scale
+        self.scale_mode = str(getattr(args, "scale_mode", "standard" if scale else "none"))
+        self.scale = (self.scale_mode.lower() != "none")
         self.timeenc = timeenc
         self.freq = freq
 
@@ -266,7 +271,6 @@ class Dataset_Custom(Dataset):
         self.__read_data__()
 
     def __read_data__(self):
-        self.scaler = StandardScaler()
         local_fp = os.path.join(self.root_path, self.data_path)
 
         if os.path.exists(local_fp):
@@ -295,12 +299,15 @@ class Dataset_Custom(Dataset):
         elif self.features == 'S':
             df_data = df_raw[[self.target]]
 
-        if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
-            self.scaler.fit(train_data.values)
-            data = self.scaler.transform(df_data.values)
-        else:
-            data = df_data.values
+        train_data = df_data[border1s[0]:border2s[0]].values
+        self.scaler = build_series_scaler(
+            scale_mode=self.scale_mode,
+            train_data=train_data,
+            feature_dim=train_data.shape[1],
+            prior_scale=getattr(self.args, "prior_scale", None),
+            prior_offset=getattr(self.args, "prior_offset", None),
+        )
+        data = self.scaler.transform(df_data.values)
 
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
@@ -426,7 +433,7 @@ class PSMSegLoader(Dataset):
         self.flag = flag
         self.step = step
         self.win_size = win_size
-        self.scaler = StandardScaler()
+        self.scale_mode = str(getattr(args, "scale_mode", "standard"))
         train_path = os.path.join(root_path, "train.csv")
         test_path = os.path.join(root_path, "test.csv")
         label_path = os.path.join(root_path, "test_label.csv")
@@ -440,16 +447,22 @@ class PSMSegLoader(Dataset):
             test_df = pd.read_csv(_hf_download_dataset_file(root_path, "test.csv"))
             test_label_df = pd.read_csv(_hf_download_dataset_file(root_path, "test_label.csv"))
 
-        data = train_df.values[:, 1:]
-        data = np.nan_to_num(data)
-        self.scaler.fit(data)
-        data = self.scaler.transform(data)
+        train_data = train_df.values[:, 1:]
+        train_data = np.nan_to_num(train_data)
+        self.scaler = build_series_scaler(
+            scale_mode=self.scale_mode,
+            train_data=train_data,
+            feature_dim=train_data.shape[1],
+            prior_scale=getattr(args, "prior_scale", None),
+            prior_offset=getattr(args, "prior_offset", None),
+        )
+        train_data = self.scaler.transform(train_data)
         
         test_data = test_df.values[:, 1:]
         test_data = np.nan_to_num(test_data)
         self.test = self.scaler.transform(test_data)
         
-        self.train = data
+        self.train = train_data
         data_len = len(self.train)
         self.val = self.train[(int)(data_len * 0.8):]
         self.test_labels = test_label_df.values[:, 1:]
@@ -486,7 +499,7 @@ class MSLSegLoader(Dataset):
         self.flag = flag
         self.step = step
         self.win_size = win_size
-        self.scaler = StandardScaler()
+        self.scale_mode = str(getattr(args, "scale_mode", "standard"))
         
         train_path = os.path.join(root_path, "MSL_train.npy")
         test_path  = os.path.join(root_path, "MSL_test.npy")
@@ -505,9 +518,15 @@ class MSLSegLoader(Dataset):
             test_data   = np.load(test_path)
             test_label  = np.load(label_path)
 
-        self.scaler.fit(train_data)
+        self.scaler = build_series_scaler(
+            scale_mode=self.scale_mode,
+            train_data=train_data,
+            feature_dim=train_data.shape[1],
+            prior_scale=getattr(args, "prior_scale", None),
+            prior_offset=getattr(args, "prior_offset", None),
+        )
         train_data = self.scaler.transform(train_data)
-        test_data  = self.scaler.transform(test_data)
+        test_data = self.scaler.transform(test_data)
 
         self.train = train_data
         self.test  = test_data
@@ -549,7 +568,7 @@ class SMAPSegLoader(Dataset):
         self.flag = flag
         self.step = step
         self.win_size = win_size
-        self.scaler = StandardScaler()
+        self.scale_mode = str(getattr(args, "scale_mode", "standard"))
         
         train_path = os.path.join(root_path, "SMAP_train.npy")
         test_path  = os.path.join(root_path, "SMAP_test.npy")
@@ -568,10 +587,15 @@ class SMAPSegLoader(Dataset):
             test_data   = np.load(test_path)
             test_label = np.load(label_path)
 
-        # 标准化
-        self.scaler.fit(train_data)
+        self.scaler = build_series_scaler(
+            scale_mode=self.scale_mode,
+            train_data=train_data,
+            feature_dim=train_data.shape[1],
+            prior_scale=getattr(args, "prior_scale", None),
+            prior_offset=getattr(args, "prior_offset", None),
+        )
         train_data = self.scaler.transform(train_data)
-        test_data  = self.scaler.transform(test_data)
+        test_data = self.scaler.transform(test_data)
 
         self.train = train_data
         self.test  = test_data
@@ -614,7 +638,7 @@ class SMDSegLoader(Dataset):
         self.flag = flag
         self.step = step
         self.win_size = win_size
-        self.scaler = StandardScaler()
+        self.scale_mode = str(getattr(args, "scale_mode", "standard"))
         
         train_path = os.path.join(root_path, "SMD_train.npy")
         test_path  = os.path.join(root_path, "SMD_test.npy")
@@ -633,7 +657,13 @@ class SMDSegLoader(Dataset):
             test_data   = np.load(test_path)
             test_label = np.load(label_path)
             
-        self.scaler.fit(train_data)
+        self.scaler = build_series_scaler(
+            scale_mode=self.scale_mode,
+            train_data=train_data,
+            feature_dim=train_data.shape[1],
+            prior_scale=getattr(args, "prior_scale", None),
+            prior_offset=getattr(args, "prior_offset", None),
+        )
         train_data = self.scaler.transform(train_data)
         test_data = self.scaler.transform(test_data)
         self.train = train_data
@@ -674,7 +704,7 @@ class SWATSegLoader(Dataset):
         self.flag = flag
         self.step = step
         self.win_size = win_size
-        self.scaler = StandardScaler()
+        self.scale_mode = str(getattr(args, "scale_mode", "standard"))
 
         train2_path = os.path.join(root_path, "swat_train2.csv")
         test_path   = os.path.join(root_path, "swat2.csv")
@@ -688,7 +718,13 @@ class SWATSegLoader(Dataset):
         train_data = train_data.values[:, :-1]
         test_data = test_data.values[:, :-1]
 
-        self.scaler.fit(train_data)
+        self.scaler = build_series_scaler(
+            scale_mode=self.scale_mode,
+            train_data=train_data,
+            feature_dim=train_data.shape[1],
+            prior_scale=getattr(args, "prior_scale", None),
+            prior_offset=getattr(args, "prior_offset", None),
+        )
         train_data = self.scaler.transform(train_data)
         test_data = self.scaler.transform(test_data)
         self.train = train_data
@@ -764,8 +800,20 @@ class UEAloader(Dataset):
         self.feature_df = self.all_df
 
         # pre_process
-        normalizer = Normalizer()
-        self.feature_df = normalizer.normalize(self.feature_df)
+        self.scale_mode = str(getattr(args, "scale_mode", "standard")).lower()
+        if self.scale_mode == "none":
+            pass
+        elif self.scale_mode == "prior":
+            scaler = PriorScaler.from_feature_dim(
+                feature_dim=self.feature_df.shape[1],
+                scale=getattr(args, "prior_scale", None),
+                offset=getattr(args, "prior_offset", None),
+            )
+            vals = scaler.transform(self.feature_df.values)
+            self.feature_df = pd.DataFrame(vals, index=self.feature_df.index, columns=self.feature_df.columns)
+        else:
+            normalizer = Normalizer()
+            self.feature_df = normalizer.normalize(self.feature_df)
         print(len(self.all_IDs))
 
     def _resolve_ts_path(self, root_path, dataset_name, flag):
@@ -852,8 +900,10 @@ class UEAloader(Dataset):
 
             batch_x = batch_x.reshape((1 * seq_len, num_columns))
 
-        return self.instance_norm(torch.from_numpy(batch_x)), \
-               torch.from_numpy(labels)
+        x = torch.from_numpy(batch_x)
+        if getattr(self, "scale_mode", "standard") != "none":
+            x = self.instance_norm(x)
+        return x, torch.from_numpy(labels)
 
     def __len__(self):
         return len(self.all_IDs)

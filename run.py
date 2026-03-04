@@ -28,6 +28,12 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', type=str, default='ETTh1.csv', help='data file')
     parser.add_argument('--no_scale', action='store_false', dest='scale', default=True,
                         help='禁用数据集级 StandardScaler（默认启用；WVEmbs 分布无关实验可尝试关闭）')
+    parser.add_argument('--scale_mode', type=str, default=None, choices=['standard', 'prior', 'none'],
+                        help='缩放模式：standard=训练集 StandardScaler；prior=物理先验无量纲化；none=不缩放（等价 no_scale）')
+    parser.add_argument('--prior_scale', type=float, nargs='+', default=None,
+                        help='prior 模式的尺度参数（标量或每通道一个值）；变换 x\'=(x-prior_offset)/prior_scale')
+    parser.add_argument('--prior_offset', type=float, nargs='+', default=None,
+                        help='prior 模式的偏置参数（标量或每通道一个值）；默认 0')
     parser.add_argument('--features', type=str, default='M',
                         help='forecasting task, options:[M, S, MS]; M:multivariate predict multivariate, S:univariate predict univariate, MS:multivariate predict univariate')
     parser.add_argument('--target', type=str, default='OT', help='target feature in S or MS task')
@@ -68,7 +74,7 @@ if __name__ == '__main__':
                         default=True)
     parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
     parser.add_argument('--embed', type=str, default='timeF',
-                        help='time features encoding, options:[timeF, fixed, learned]; WVEmbs: wv_timeF / wv_fixed / wv_learned / wv')
+                        help='time features encoding, options:[timeF, fixed, learned]; WVEmbs: wv（统一时间入通道）/ wv_timeF / wv_fixed / wv_learned（消融）')
     parser.add_argument('--activation', type=str, default='gelu', help='activation')
     parser.add_argument('--channel_independence', type=int, default=1,
                         help='0: channel dependence 1: channel independence for FreTS model')
@@ -182,6 +188,12 @@ if __name__ == '__main__':
     parser.add_argument('--pos', type=int, choices=[0, 1], default=1, help='Positional Embedding. Set pos to 0 or 1')
 
     args = parser.parse_args()
+
+    # 兼容旧参数：若未显式指定 --scale_mode，则由 --no_scale / args.scale 推导
+    if args.scale_mode is None:
+        args.scale_mode = 'standard' if getattr(args, 'scale', True) else 'none'
+    # 确保 args.scale 与 scale_mode 语义一致（部分 loader 仍会读取 args.scale）
+    args.scale = (str(args.scale_mode).lower() != 'none')
     if torch.cuda.is_available() and args.use_gpu:
         args.device = torch.device('cuda:{}'.format(args.gpu))
         print('Using GPU')

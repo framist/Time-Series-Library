@@ -3,6 +3,7 @@ from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Data
 from data_provider.uea import collate_fn
 from torch.utils.data import DataLoader
 from utils.embed_utils import parse_embed_arg
+import torch
 
 data_dict = {
     'ETTh1': Dataset_ETT_hour,
@@ -29,6 +30,9 @@ def data_provider(args, flag):
     drop_last = False
     batch_size = args.batch_size
     freq = args.freq
+    pin_memory = bool(getattr(args, "use_gpu", False) and getattr(args, "gpu_type", "cuda") == "cuda" and torch.cuda.is_available())
+    persistent_workers = bool(getattr(args, "num_workers", 0) and int(getattr(args, "num_workers", 0)) > 0)
+    prefetch_factor = int(getattr(args, "prefetch_factor", 4)) if persistent_workers else None
 
     if args.task_name == 'anomaly_detection':
         drop_last = False
@@ -44,6 +48,9 @@ def data_provider(args, flag):
             batch_size=batch_size,
             shuffle=shuffle_flag,
             num_workers=args.num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
+            prefetch_factor=prefetch_factor,
             drop_last=drop_last)
         return data_set, data_loader
     elif args.task_name == 'classification':
@@ -59,6 +66,9 @@ def data_provider(args, flag):
             batch_size=batch_size,
             shuffle=shuffle_flag,
             num_workers=args.num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
+            prefetch_factor=prefetch_factor,
             drop_last=drop_last,
             collate_fn=lambda x: collate_fn(x, max_len=args.seq_len)
         )
@@ -86,5 +96,8 @@ def data_provider(args, flag):
             batch_size=batch_size,
             shuffle=shuffle_flag,
             num_workers=args.num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
+            prefetch_factor=prefetch_factor,
             drop_last=drop_last)
         return data_set, data_loader

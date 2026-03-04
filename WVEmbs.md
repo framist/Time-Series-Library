@@ -19,12 +19,13 @@ WVEmbs 的核心是把连续物理量视为值域上的 Dirac 测度 \(\delta_x\
 
 启用方式（与原有 `timeF/fixed/learned` 完全兼容）：
 - `--embed timeF|fixed|learned`：原始行为（TokenEmbedding）
-- `--embed wv_timeF|wv_fixed|wv_learned`：启用 WVEmbs + WV-Lift（value embedding），时间特征编码仍按后缀决定
-- `--embed wv`：等价于 `wv_timeF`
+- `--embed wv_timeF|wv_fixed|wv_learned`：启用 WVEmbs + WV-Lift（value embedding），时间特征编码仍按后缀决定（**消融对照**）
+- `--embed wv`：**统一模式（论文核心配置）**：将 `x` 与 `x_mark(timeF)` 沿通道维拼接后一起进入 WV-Lift，不再使用 `TemporalEmbedding/TimeFeatureEmbedding`
 
 代码位置：
 - `layers/Embed.py`：新增 `WVEmbs` 与 `WVLiftEmbedding`，并在 `DataEmbedding/DataEmbedding_wo_pos` 内按 `--embed` 自动切换
 - `utils/embed_utils.py`：解析 `--embed` 的小工具
+- `utils/scalers.py`：新增 `scale_mode=prior` 的先验无量纲化 scaler（不依赖训练集统计量）
 - `data_provider/data_factory.py`：修正 `timeenc` 判定，使 `wv_timeF` 仍走 `timeF` 的时间特征生成
 - `models/TemporalFusionTransformer.py`：同步修正 `timeF` 判定（避免 `wv_timeF` 被误判）
 - `exp/exp_basic.py`：设备选择更稳健（CUDA/MPS 不可用时自动回退 CPU，并同步 `args.use_gpu/args.device`）
@@ -40,7 +41,7 @@ WVEmbs 的核心是把连续物理量视为值域上的 Dirac 测度 \(\delta_x\
 python scripts/wvembs/smoke_forward.py
 ```
 
-默认会对 `Transformer,Informer,TimesNet` 用 `--embed wv_timeF` 做一次随机输入的前向与反传。
+默认会对 `Transformer,Informer,TimesNet` 用 `--embed wv`（统一模式）做一次随机输入的前向与反传。
 
 如果需要顺便覆盖“掩码增强”的代码路径，可加参数，例如：
 
@@ -82,9 +83,11 @@ python scripts/wvembs/smoke_tasks.py --wv_mask_prob 1 --wv_mask_type arcsine
 
 ## 联合谱采样（JSS）
 
+TODO 注意：如果后端网络原生支持多通道 Embs 输入，则不使用通道混合的 WVEmbs，并标明
+
 最小实现提供两种谱采样方式：
 - `--wv_sampling iss`：逐变量独立采样（ISS，默认；即先对每个通道做 WVEmbs，再做显式混合）
-- `--wv_sampling jss`：联合谱采样（JSS；对多通道向量采样随机频率向量并做内积，再取 cos/sin）
+- `--wv_sampling jss`：联合谱采样（JSS；对多通道向量采样随机频率向量并做内积，再取 cos/sin） 
 
 参数：
 - `--wv_sampling`：`iss|jss`
@@ -94,7 +97,7 @@ python scripts/wvembs/smoke_tasks.py --wv_mask_prob 1 --wv_mask_type arcsine
 
 在本仓库中，若本地 `root_path/data_path` 不存在，部分数据集 loader（ETT/Custom/PSM/SWaT 等）会尝试通过 `huggingface_hub` 从 HF 数据集仓库 `thuml/Time-Series-Library` 自动下载对应 CSV；若网络/SSL 受限，请手动将文件放到本地目录（例如 `./dataset/ETT-small/ETTh1.csv`）。
 
-准备好数据后，可参考 README 的 quick test，把 `--embed` 换成 `wv_timeF` 并减小规模以适配小 GPU：
+准备好数据后，可参考 README 的 quick test，把 `--embed` 换成 `wv`（统一模式）并减小规模以适配小 GPU：
 
 ```bash
 python -u run.py \
@@ -106,11 +109,11 @@ python -u run.py \
   --d_model 64 --d_ff 128 --n_heads 4 --e_layers 2 --d_layers 1 \
   --train_epochs 1 --batch_size 8 --num_workers 2 \
   --max_train_steps 50 --max_val_steps 10 --max_test_steps 10 \
-  --embed wv_timeF \
+  --embed wv \
   --itr 1
 ```
 
-对照实验只需将 `--embed wv_timeF` 改回 `--embed timeF`。
+对照实验可将 `--embed wv` 改回 `--embed timeF`（传统基线），或改为 `--embed wv_timeF`（消融：值用 WVEmbs、时间仍用传统嵌入）。
 
 #### 离线 toy 数据（custom）快速验证（无需下载任何公开数据）
 
@@ -150,7 +153,7 @@ python -u run.py \
   --d_model 32 --d_ff 64 --n_heads 4 --e_layers 2 --d_layers 1 \
   --train_epochs 1 --batch_size 4 --num_workers 0 \
   --max_train_steps 1 --max_val_steps 1 --max_test_steps 1 \
-  --embed wv_timeF --checkpoints ./checkpoints_wvembs/ --no_use_gpu \
+  --embed wv --checkpoints ./checkpoints_wvembs/ --no_use_gpu \
   --itr 1
 ```
 
@@ -169,11 +172,23 @@ python -u run.py \
 - FEDformer（`embed=wv_timeF,label_len=48`）：MSE=1.5518832，MAE=1.0816071
 - MICN（`embed=wv_timeF,label_len=96`）：MSE=1.4754682，MAE=1.0594077（注意 MICN 官方脚本默认 `label_len=seq_len`）
 
+## 阶段 0/1 最终结论（2026-03-04）
+
+- 对齐上游口径：
+  - 阶段 0（embed 对照）：不传 `--inverse`（指标在缩放空间，对齐 `scripts/*/ETT_script/*.sh` 默认）
+  - 阶段 1（scale_mode 对照）：显式传 `--inverse`（把 `standard/prior/none` 的指标统一回原始物理量尺度）
+- 最终结果与表格：见 `Report.md`（该文件只保留最终结果，不包含弃用/最小预算尝试）
+- 关键发现（供后续阶段 2/3 设计超参扫描时参考）：
+  - ETTh1 forecast 上，`wv_timeF` 在 `wv_sampling=jss` 下显著优于 `timeF`
+  - `wv` 统一模式与 `wv_sampling` 有强交互：在 ETTh1 forecast 上 `wv_sampling=iss` 能显著改善 `wv`，但 `jss` 可能导致退化（需要解释原因并形成统一默认）
+  - `scale_mode=none` 的“基线崩溃”并非在所有数据集上成立：ETTh1 不崩溃，但 Electricity(ECL) 上 `no_scale+timeF` 会出现 NaN
+  - prior 的“物理先验”仍待补齐：ETT 目前用训练段 `max(abs(x))×slack` 做初始化；ECL 上 `prior_scale` 对结果非常敏感，需要更稳健的先验设定流程
+
 ## 下一步实验建议（先做 backbone 提升验证）
 
 建议先固定数据集与训练预算（例如 ETTh1 / `seq_len=96,pred_len=96` / `d_model=64` / 1~3 epoch），对比：
 - Backbone：`Transformer` / `Informer` / `TimesNet` / `Autoformer` / `FEDformer`
-- Embed：`timeF` vs `wv_timeF`
+- Embed：`timeF` vs `wv_timeF`（消融） vs `wv`（统一）
 
 对应的最小预算脚本：
 - `scripts/wvembs/forecast_etth1_backbones.sh`
@@ -187,14 +202,27 @@ python -u run.py \
 
 - Forecast（ETTh1）：`scripts/wvembs/forecast_etth1_backbones.sh`
 - Forecast（ETTh1 + no\_scale）：`scripts/wvembs/forecast_etth1_noscale.sh`
+- Forecast（ETTh1 + 阶段0 embed 对照）：`scripts/wvembs/forecast_etth1_stage0_embed_compare.sh`
+- Forecast（ETTh1 + 阶段0/1核心四组对照）：`scripts/wvembs/forecast_etth1_stage01_core.sh`
+- Forecast（ETTm1 + 阶段0 embed 对照）：`scripts/wvembs/forecast_ettm1_stage0_embed_compare.sh`
+- Forecast（ETTm1 + 阶段0/1核心四组对照）：`scripts/wvembs/forecast_ettm1_stage01_core.sh`
 - Forecast（ETTh1 + ISS vs JSS）：`scripts/wvembs/forecast_etth1_jss.sh`
 - Imputation（ETTh1）：`scripts/wvembs/imputation_etth1_quick.sh`
+- Imputation（ETTh1 + 阶段0 embed 对照）：`scripts/wvembs/imputation_etth1_stage0_embed_compare.sh`
+- Imputation（ETTh1 + 阶段0/1核心四组对照）：`scripts/wvembs/imputation_etth1_stage01_core.sh`
+- Imputation（ETTm1 + 阶段0 embed 对照）：`scripts/wvembs/imputation_ettm1_stage0_embed_compare.sh`
+- Imputation（ETTm1 + 阶段0/1核心四组对照）：`scripts/wvembs/imputation_ettm1_stage01_core.sh`
 - Anomaly Detection（PSM）：`scripts/wvembs/anomaly_psm_quick.sh`
+- Anomaly Detection（PSM + scale_mode 对照）：`scripts/wvembs/anomaly_psm_stage01_scale_compare.sh`
 - Classification（Heartbeat/UEA）：`scripts/wvembs/classification_heartbeat_quick.sh`
+- Classification（Heartbeat/UEA + scale_mode 对照）：`scripts/wvembs/classification_heartbeat_stage01_scale_compare.sh`
 
 ## 备注（与“分布无关”目标的差距）
 
-目前 TSLib 的多数数据集仍默认使用 `StandardScaler`（依赖训练集统计量），因此即便输入 embedding 改为 WVEmbs，也还没有完全实现“端到端分布无关”的数据管线。后续若要更贴近论文设定，需要进一步支持：
-- 关闭数据集级标准化（`run.py` 已支持 `--no_scale`）/ 或引入物理先验尺度（\(X_{\max},\delta\)）的无量纲化
+目前 TSLib 的多数数据集仍默认使用 `StandardScaler`（依赖训练集统计量），因此即便输入 embedding 改为 WVEmbs，也还没有完全实现“端到端分布无关”的数据管线。为更贴近论文设定，本仓库已新增：
+- `--scale_mode standard|prior|none`：分别对应 StandardScaler / 物理先验无量纲化 / 不缩放（`--no_scale` 等价于 `--scale_mode none`）
+- `--scale_mode prior` 需要提供 `--prior_scale`（可为标量或每通道一个值；`--prior_offset` 可选）
+  - 可先用 `python scripts/wvembs/estimate_prior_scale.py ...` 做一个“宽松上界”的初始化，再按物理意义修订并记录
+  - 若要在 `standard/prior/none` 三种模式间横向比较指标，建议显式加 `--inverse`（将输出/标签逆变换回原始物理量尺度）
 - 更系统的外推与掩码策略（例如只对低频尾部掩码的更细粒度控制、更多外推变体与协议）
 - 更严格的多通道联合谱采样（JSS）的物理相关性先验注入（例如协方差结构、与任务相关的采样分布设计）

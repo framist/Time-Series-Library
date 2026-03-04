@@ -19,8 +19,10 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+from utils.timefeatures import time_features_dim
 
-def _make_common_configs(model_name: str) -> Namespace:
+
+def _make_common_configs(model_name: str, embed: str) -> Namespace:
     # 这套最小配置可覆盖多个主流预测 backbone（Transformer / Informer / TimesNet）。
     return Namespace(
         task_name="long_term_forecast",
@@ -33,7 +35,7 @@ def _make_common_configs(model_name: str) -> Namespace:
         dec_in=3,
         c_out=3,
         # embedding（启用 WVEmbs）
-        embed="wv_timeF",
+        embed=embed,
         freq="h",
         dropout=0.1,
         # WVEmbs masking（默认关闭；由 CLI 覆盖）
@@ -63,11 +65,11 @@ def _make_common_configs(model_name: str) -> Namespace:
 
 
 def _make_fake_batch(cfg: Namespace, batch_size: int = 2):
-    # `timeF` 在 freq='h' 下生成 4 维时间特征（month/day/weekday/hour 的线性组合特征）。
+    time_dim = int(time_features_dim(cfg.freq))
     x_enc = torch.randn(batch_size, cfg.seq_len, cfg.enc_in)
-    x_mark_enc = torch.randn(batch_size, cfg.seq_len, 4)
+    x_mark_enc = torch.randn(batch_size, cfg.seq_len, time_dim)
     x_dec = torch.randn(batch_size, cfg.label_len + cfg.pred_len, cfg.dec_in)
-    x_mark_dec = torch.randn(batch_size, cfg.label_len + cfg.pred_len, 4)
+    x_mark_dec = torch.randn(batch_size, cfg.label_len + cfg.pred_len, time_dim)
     return x_enc, x_mark_enc, x_dec, x_mark_dec
 
 
@@ -88,6 +90,12 @@ def main():
         type=str,
         default="Transformer,Informer,TimesNet",
         help="Comma-separated model names to smoke-test: Transformer, Informer, TimesNet",
+    )
+    parser.add_argument(
+        "--embed",
+        type=str,
+        default="wv",
+        help="embedding 模式：wv（统一时间入通道）或 wv_timeF（消融：时间仍用 TimeFeatureEmbedding）",
     )
     parser.add_argument("--wv_mask_prob", type=float, default=0.0, help="WVEmbs 掩码概率，0 关闭")
     parser.add_argument(
@@ -110,7 +118,7 @@ def main():
         raise SystemExit("No models specified.")
 
     for name in model_names:
-        cfg = _make_common_configs(name)
+        cfg = _make_common_configs(name, args.embed)
         cfg.wv_mask_prob = args.wv_mask_prob
         cfg.wv_mask_type = args.wv_mask_type
         cfg.wv_mask_phi_max = args.wv_mask_phi_max

@@ -29,7 +29,7 @@ MAX_TRAIN=50
 MAX_VAL=10
 MAX_TEST=10
 
-for embed in timeF wv_timeF; do
+for embed in timeF wv_timeF wv; do
   python -u run.py \
     --task_name long_term_forecast \
     --is_training 1 \

@@ -44,13 +44,16 @@ class Exp_Anomaly_Detection(Exp_Basic):
         total_loss = []
         self.model.eval()
         max_val_steps = getattr(self.args, 'max_val_steps', -1)
+        use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
+        non_blocking = (self.device.type == "cuda")
         with torch.no_grad():
             for i, (batch_x, _) in enumerate(vali_loader):
                 if max_val_steps > 0 and i >= max_val_steps:
                     break
-                batch_x = batch_x.float().to(self.device)
+                batch_x = batch_x.float().to(self.device, non_blocking=non_blocking)
 
-                outputs = self.model(batch_x, None, None, None)
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    outputs = self.model(batch_x, None, None, None)
 
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, :, f_dim:]
@@ -79,6 +82,9 @@ class Exp_Anomaly_Detection(Exp_Basic):
 
         model_optim = self._select_optimizer()
         criterion = self._select_criterion()
+        use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
+        non_blocking = (self.device.type == "cuda")
+        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
         for epoch in range(self.args.train_epochs):
             iter_count = 0
@@ -93,9 +99,10 @@ class Exp_Anomaly_Detection(Exp_Basic):
                 iter_count += 1
                 model_optim.zero_grad()
 
-                batch_x = batch_x.float().to(self.device)
+                batch_x = batch_x.float().to(self.device, non_blocking=non_blocking)
 
-                outputs = self.model(batch_x, None, None, None)
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    outputs = self.model(batch_x, None, None, None)
 
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, :, f_dim:]
@@ -110,8 +117,13 @@ class Exp_Anomaly_Detection(Exp_Basic):
                     iter_count = 0
                     time_now = time.time()
 
-                loss.backward()
-                model_optim.step()
+                if use_amp:
+                    scaler.scale(loss).backward()
+                    scaler.step(model_optim)
+                    scaler.update()
+                else:
+                    loss.backward()
+                    model_optim.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
@@ -146,17 +158,20 @@ class Exp_Anomaly_Detection(Exp_Basic):
         self.model.eval()
         self.anomaly_criterion = nn.MSELoss(reduce=False)
         max_test_steps = getattr(self.args, 'max_test_steps', -1)
+        use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
+        non_blocking = (self.device.type == "cuda")
 
         # (1) stastic on the train set
         with torch.no_grad():
             for i, (batch_x, batch_y) in enumerate(train_loader):
                 if max_test_steps > 0 and i >= max_test_steps:
                     break
-                batch_x = batch_x.float().to(self.device)
+                batch_x = batch_x.float().to(self.device, non_blocking=non_blocking)
                 # reconstruction
-                outputs = self.model(batch_x, None, None, None)
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    outputs = self.model(batch_x, None, None, None)
                 # criterion
-                score = torch.mean(self.anomaly_criterion(batch_x, outputs), dim=-1)
+                score = torch.mean(self.anomaly_criterion(batch_x.float(), outputs.float()), dim=-1)
                 score = score.detach().cpu().numpy()
                 attens_energy.append(score)
 
@@ -169,11 +184,12 @@ class Exp_Anomaly_Detection(Exp_Basic):
         for i, (batch_x, batch_y) in enumerate(test_loader):
             if max_test_steps > 0 and i >= max_test_steps:
                 break
-            batch_x = batch_x.float().to(self.device)
+            batch_x = batch_x.float().to(self.device, non_blocking=non_blocking)
             # reconstruction
-            outputs = self.model(batch_x, None, None, None)
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                outputs = self.model(batch_x, None, None, None)
             # criterion
-            score = torch.mean(self.anomaly_criterion(batch_x, outputs), dim=-1)
+            score = torch.mean(self.anomaly_criterion(batch_x.float(), outputs.float()), dim=-1)
             score = score.detach().cpu().numpy()
             attens_energy.append(score)
             test_labels.append(batch_y)

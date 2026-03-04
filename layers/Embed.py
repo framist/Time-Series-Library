@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils import weight_norm
 import math
-from utils.embed_utils import parse_embed_arg
+from utils.embed_utils import parse_embed_arg, is_wv_unified
+from utils.timefeatures import time_features_dim
 
 
 class PositionalEmbedding(nn.Module):
@@ -98,9 +99,9 @@ class TimeFeatureEmbedding(nn.Module):
     def __init__(self, d_model, embed_type='timeF', freq='h'):
         super(TimeFeatureEmbedding, self).__init__()
 
-        freq_map = {'h': 4, 't': 5, 's': 6,
-                    'm': 1, 'a': 1, 'w': 2, 'd': 3, 'b': 3}
-        d_inp = freq_map[freq]
+        d_inp = int(time_features_dim(freq))
+        if d_inp <= 0:
+            raise ValueError(f"timeF 在 freq={freq!r} 下的时间特征维度为 {d_inp}，无法构造 TimeFeatureEmbedding")
         self.embed = nn.Linear(d_inp, d_model, bias=False)
 
     def forward(self, x):
@@ -279,17 +280,55 @@ class DataEmbedding(nn.Module):
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1, wv_cfg=None):
         super(DataEmbedding, self).__init__()
 
+        self.wv_unified = is_wv_unified(embed_type)
+
         time_embed_type, value_embed_type = parse_embed_arg(embed_type)
 
-        self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout, wv_cfg=wv_cfg) \
-            if value_embed_type == 'wv' else TokenEmbedding(c_in=c_in, d_model=d_model)
+        if self.wv_unified:
+            # 统一 WVEmbs：将时间特征视为“物理量通道”，与 x 沿通道维拼接后一起进入 WV-Lift
+            self.time_feat_dim = int(time_features_dim(freq))
+            self.value_embedding = WVLiftEmbedding(
+                c_in=c_in + self.time_feat_dim,
+                d_model=d_model,
+                dropout=dropout,
+                wv_cfg=wv_cfg,
+            )
+            self.temporal_embedding = None
+        else:
+            self.time_feat_dim = None
+            self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout, wv_cfg=wv_cfg) \
+                if value_embed_type == 'wv' else TokenEmbedding(c_in=c_in, d_model=d_model)
+            self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=time_embed_type,
+                                                        freq=freq) if time_embed_type != 'timeF' else TimeFeatureEmbedding(
+                d_model=d_model, embed_type=time_embed_type, freq=freq)
+
         self.position_embedding = PositionalEmbedding(d_model=d_model)
-        self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=time_embed_type,
-                                                    freq=freq) if time_embed_type != 'timeF' else TimeFeatureEmbedding(
-            d_model=d_model, embed_type=time_embed_type, freq=freq)
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, x_mark):
+        if self.wv_unified:
+            if x_mark is None:
+                x_mark = torch.zeros(
+                    x.shape[0],
+                    x.shape[1],
+                    int(self.time_feat_dim or 0),
+                    device=x.device,
+                    dtype=x.dtype,
+                )
+            else:
+                if x_mark.shape[1] != x.shape[1]:
+                    raise ValueError(f"wv 统一模式要求 x 与 x_mark 的序列长度一致，但得到 {x.shape[1]} vs {x_mark.shape[1]}")
+                if x_mark.shape[-1] != int(self.time_feat_dim or 0):
+                    raise ValueError(
+                        f"wv 统一模式要求 x_mark 最后一维为 time_feat_dim={self.time_feat_dim}，但得到 {x_mark.shape[-1]}"
+                    )
+                if x_mark.dtype != x.dtype:
+                    x_mark = x_mark.to(dtype=x.dtype)
+
+            x_cat = torch.cat([x, x_mark], dim=-1) if int(self.time_feat_dim or 0) > 0 else x
+            x = self.value_embedding(x_cat) + self.position_embedding(x)
+            return self.dropout(x)
+
         if x_mark is None:
             x = self.value_embedding(x) + self.position_embedding(x)
         else:
@@ -319,17 +358,54 @@ class DataEmbedding_wo_pos(nn.Module):
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1, wv_cfg=None):
         super(DataEmbedding_wo_pos, self).__init__()
 
+        self.wv_unified = is_wv_unified(embed_type)
+
         time_embed_type, value_embed_type = parse_embed_arg(embed_type)
 
-        self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout, wv_cfg=wv_cfg) \
-            if value_embed_type == 'wv' else TokenEmbedding(c_in=c_in, d_model=d_model)
+        if self.wv_unified:
+            self.time_feat_dim = int(time_features_dim(freq))
+            self.value_embedding = WVLiftEmbedding(
+                c_in=c_in + self.time_feat_dim,
+                d_model=d_model,
+                dropout=dropout,
+                wv_cfg=wv_cfg,
+            )
+            self.temporal_embedding = None
+        else:
+            self.time_feat_dim = None
+            self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout, wv_cfg=wv_cfg) \
+                if value_embed_type == 'wv' else TokenEmbedding(c_in=c_in, d_model=d_model)
+            self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=time_embed_type,
+                                                        freq=freq) if time_embed_type != 'timeF' else TimeFeatureEmbedding(
+                d_model=d_model, embed_type=time_embed_type, freq=freq)
+
         self.position_embedding = PositionalEmbedding(d_model=d_model)
-        self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=time_embed_type,
-                                                    freq=freq) if time_embed_type != 'timeF' else TimeFeatureEmbedding(
-            d_model=d_model, embed_type=time_embed_type, freq=freq)
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, x_mark):
+        if self.wv_unified:
+            if x_mark is None:
+                x_mark = torch.zeros(
+                    x.shape[0],
+                    x.shape[1],
+                    int(self.time_feat_dim or 0),
+                    device=x.device,
+                    dtype=x.dtype,
+                )
+            else:
+                if x_mark.shape[1] != x.shape[1]:
+                    raise ValueError(f"wv 统一模式要求 x 与 x_mark 的序列长度一致，但得到 {x.shape[1]} vs {x_mark.shape[1]}")
+                if x_mark.shape[-1] != int(self.time_feat_dim or 0):
+                    raise ValueError(
+                        f"wv 统一模式要求 x_mark 最后一维为 time_feat_dim={self.time_feat_dim}，但得到 {x_mark.shape[-1]}"
+                    )
+                if x_mark.dtype != x.dtype:
+                    x_mark = x_mark.to(dtype=x.dtype)
+
+            x_cat = torch.cat([x, x_mark], dim=-1) if int(self.time_feat_dim or 0) > 0 else x
+            x = self.value_embedding(x_cat)
+            return self.dropout(x)
+
         if x_mark is None:
             x = self.value_embedding(x)
         else:

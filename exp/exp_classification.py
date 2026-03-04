@@ -50,15 +50,18 @@ class Exp_Classification(Exp_Basic):
         trues = []
         self.model.eval()
         max_val_steps = getattr(self.args, 'max_val_steps', -1)
+        use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
+        non_blocking = (self.device.type == "cuda")
         with torch.no_grad():
             for i, (batch_x, label, padding_mask) in enumerate(vali_loader):
                 if max_val_steps > 0 and i >= max_val_steps:
                     break
-                batch_x = batch_x.float().to(self.device)
-                padding_mask = padding_mask.float().to(self.device)
-                label = label.to(self.device)
+                batch_x = batch_x.float().to(self.device, non_blocking=non_blocking)
+                padding_mask = padding_mask.float().to(self.device, non_blocking=non_blocking)
+                label = label.to(self.device, non_blocking=non_blocking)
 
-                outputs = self.model(batch_x, padding_mask, None, None)
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    outputs = self.model(batch_x, padding_mask, None, None)
 
                 pred = outputs.detach()
                 loss = criterion(pred, label.long().squeeze())
@@ -95,6 +98,9 @@ class Exp_Classification(Exp_Basic):
 
         model_optim = self._select_optimizer()
         criterion = self._select_criterion()
+        use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
+        non_blocking = (self.device.type == "cuda")
+        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
         for epoch in range(self.args.train_epochs):
             iter_count = 0
@@ -110,12 +116,13 @@ class Exp_Classification(Exp_Basic):
                 iter_count += 1
                 model_optim.zero_grad()
 
-                batch_x = batch_x.float().to(self.device)
-                padding_mask = padding_mask.float().to(self.device)
-                label = label.to(self.device)
+                batch_x = batch_x.float().to(self.device, non_blocking=non_blocking)
+                padding_mask = padding_mask.float().to(self.device, non_blocking=non_blocking)
+                label = label.to(self.device, non_blocking=non_blocking)
 
-                outputs = self.model(batch_x, padding_mask, None, None)
-                loss = criterion(outputs, label.long().squeeze(-1))
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    outputs = self.model(batch_x, padding_mask, None, None)
+                    loss = criterion(outputs, label.long().squeeze(-1))
                 train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
@@ -126,9 +133,16 @@ class Exp_Classification(Exp_Basic):
                     iter_count = 0
                     time_now = time.time()
 
-                loss.backward()
-                nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
-                model_optim.step()
+                if use_amp:
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(model_optim)
+                    nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
+                    scaler.step(model_optim)
+                    scaler.update()
+                else:
+                    loss.backward()
+                    nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
+                    model_optim.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
@@ -162,15 +176,18 @@ class Exp_Classification(Exp_Basic):
 
         self.model.eval()
         max_test_steps = getattr(self.args, 'max_test_steps', -1)
+        use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
+        non_blocking = (self.device.type == "cuda")
         with torch.no_grad():
             for i, (batch_x, label, padding_mask) in enumerate(test_loader):
                 if max_test_steps > 0 and i >= max_test_steps:
                     break
-                batch_x = batch_x.float().to(self.device)
-                padding_mask = padding_mask.float().to(self.device)
-                label = label.to(self.device)
+                batch_x = batch_x.float().to(self.device, non_blocking=non_blocking)
+                padding_mask = padding_mask.float().to(self.device, non_blocking=non_blocking)
+                label = label.to(self.device, non_blocking=non_blocking)
 
-                outputs = self.model(batch_x, padding_mask, None, None)
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    outputs = self.model(batch_x, padding_mask, None, None)
 
                 preds.append(outputs.detach())
                 trues.append(label)

@@ -5,7 +5,7 @@ set -euo pipefail
 # 说明：
 # - 需要提前准备数据：./dataset/ETT-small/ETTh1.csv
 # - 不强制 GPU；如果无 GPU，会自动回退 CPU（但会慢）
-# - 对照维度：Embed = timeF vs wv_timeF；Backbone = Transformer/Informer/TimesNet/Autoformer/FEDformer
+# - 对照维度：Embed = timeF vs wv_timeF（消融） vs wv（统一时间入通道）；Backbone = Transformer/Informer/TimesNet/Autoformer/FEDformer
 
 ROOT=./dataset/ETT-small
 DATA=ETTh1.csv
@@ -29,7 +29,7 @@ MAX_VAL=10
 MAX_TEST=10
 
 for model in Transformer Informer TimesNet Autoformer FEDformer; do
-  for embed in timeF wv_timeF; do
+  for embed in timeF wv_timeF wv; do
     python -u run.py \
       --task_name long_term_forecast \
       --is_training 1 \
