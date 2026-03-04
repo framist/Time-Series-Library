@@ -37,7 +37,6 @@ MAX_TEST="${MAX_TEST:--1}"
 DES="${DES:-WVEmbsFinal}"
 
 USE_AMP="${USE_AMP:-1}"
-WV_SAMPLING="${WV_SAMPLING:-jss}"
 WV_JSS_STD="${WV_JSS_STD:-1.0}"
 WV_BASE="${WV_BASE:-10000.0}"
 
@@ -45,9 +44,22 @@ AMP_ARGS=()
 if [[ "${USE_AMP}" == "1" ]]; then
   AMP_ARGS=(--use_amp)
 fi
-WV_ARGS=(--wv_sampling "${WV_SAMPLING}" --wv_jss_std "${WV_JSS_STD}" --wv_base "${WV_BASE}")
 
 for embed in timeF wv_timeF wv; do
+  # 统一模式与采样策略有较强交互：默认按最终报告复现实验
+  # - wv_timeF: jss
+  # - wv: iss
+  #
+  # 若设置环境变量 WV_SAMPLING，则对 wv_timeF/wv 统一覆盖（便于扫参）。
+  WV_ARGS=()
+  if [[ "${embed}" == "wv_timeF" ]]; then
+    sampling="${WV_SAMPLING:-jss}"
+    WV_ARGS=(--wv_sampling "${sampling}" --wv_jss_std "${WV_JSS_STD}" --wv_base "${WV_BASE}")
+  elif [[ "${embed}" == "wv" ]]; then
+    sampling="${WV_SAMPLING:-iss}"
+    WV_ARGS=(--wv_sampling "${sampling}" --wv_jss_std "${WV_JSS_STD}" --wv_base "${WV_BASE}")
+  fi
+
   python -u run.py \
     --task_name long_term_forecast \
     --is_training 1 \

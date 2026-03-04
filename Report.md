@@ -67,10 +67,10 @@ prior 参数（用于阶段 1 的组 C）：
 | D | standard | timeF | 91208.648438 | 224.118073 |
 | A | none | timeF | NaN（epoch1 起训练 loss 直接 NaN，中止） | - |
 | B | none | wv（统一） | 10735375.000000 | 3226.888672 |
-| C | prior | wv（统一） | 230979.453125 | 381.562500 |
+| C | prior | wv（统一） | 122185.250000 | 265.108093 |
 
 prior 参数（组 C）：
-- `prior_scale = 100000`（标量；该数据集对 `prior_scale` 量级非常敏感）
+- `prior_scale = 5000`（标量；该数据集对 `prior_scale` 量级非常敏感）
 
 ### Imputation（ETTh1，TimesNet）
 

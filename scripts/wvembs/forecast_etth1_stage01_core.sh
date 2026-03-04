@@ -43,7 +43,6 @@ MAX_TEST="${MAX_TEST:--1}"
 DES="${DES:-WVEmbsFinal}"
 
 USE_AMP="${USE_AMP:-1}"
-WV_SAMPLING="${WV_SAMPLING:-jss}"
 WV_JSS_STD="${WV_JSS_STD:-1.0}"
 WV_BASE="${WV_BASE:-10000.0}"
 
@@ -51,7 +50,20 @@ AMP_ARGS=()
 if [[ "${USE_AMP}" == "1" ]]; then
   AMP_ARGS=(--use_amp)
 fi
-WV_ARGS=(--wv_sampling "${WV_SAMPLING}" --wv_jss_std "${WV_JSS_STD}" --wv_base "${WV_BASE}")
+
+# 统一模式与采样策略在 stage1 下有较强交互：
+# - 组 B（no_scale + wv）默认使用 iss
+# - 组 C（prior + wv）默认使用 jss
+#
+# 若设置环境变量 WV_SAMPLING，则对 B/C 统一覆盖（便于扫参）。
+WV_SAMPLING_B="${WV_SAMPLING_B:-iss}"
+WV_SAMPLING_C="${WV_SAMPLING_C:-jss}"
+if [[ -n "${WV_SAMPLING:-}" ]]; then
+  WV_SAMPLING_B="${WV_SAMPLING}"
+  WV_SAMPLING_C="${WV_SAMPLING}"
+fi
+WV_ARGS_B=(--wv_sampling "${WV_SAMPLING_B}" --wv_jss_std "${WV_JSS_STD}" --wv_base "${WV_BASE}")
+WV_ARGS_C=(--wv_sampling "${WV_SAMPLING_C}" --wv_jss_std "${WV_JSS_STD}" --wv_base "${WV_BASE}")
 
 run_one () {
   local group="$1"
@@ -89,7 +101,6 @@ run_one () {
     --inverse \
     --embed "${embed}" \
     "${AMP_ARGS[@]}" \
-    "${WV_ARGS[@]}" \
     --itr 1 \
     --des "${DES}" \
     "$@"
@@ -102,7 +113,7 @@ run_one "D_std" "timeF"
 run_one "A_noscale" "timeF" --no_scale
 
 # B：no_scale + wv（统一）
-run_one "B_noscale" "wv" --no_scale
+run_one "B_noscale" "wv" --no_scale "${WV_ARGS_B[@]}"
 
 # C：prior + wv
 if [[ -z "${PRIOR_SCALE:-}" ]]; then
@@ -113,7 +124,7 @@ fi
 read -r -a PRIOR_SCALE_ARR <<< "${PRIOR_SCALE}"
 if [[ -n "${PRIOR_OFFSET:-}" ]]; then
   read -r -a PRIOR_OFFSET_ARR <<< "${PRIOR_OFFSET}"
-  run_one "C_prior" "wv" --scale_mode prior --prior_scale "${PRIOR_SCALE_ARR[@]}" --prior_offset "${PRIOR_OFFSET_ARR[@]}"
+  run_one "C_prior" "wv" --scale_mode prior --prior_scale "${PRIOR_SCALE_ARR[@]}" --prior_offset "${PRIOR_OFFSET_ARR[@]}" "${WV_ARGS_C[@]}"
 else
-  run_one "C_prior" "wv" --scale_mode prior --prior_scale "${PRIOR_SCALE_ARR[@]}"
+  run_one "C_prior" "wv" --scale_mode prior --prior_scale "${PRIOR_SCALE_ARR[@]}" "${WV_ARGS_C[@]}"
 fi

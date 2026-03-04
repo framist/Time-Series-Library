@@ -139,5 +139,5 @@
 
 - `wv` 统一模式与 `wv_sampling`/`scale_mode` 有强交互：目前观察到 ETTh1 上 `wv_sampling=iss` 能显著改善 `no_scale + wv`，而 `prior + wv` 更偏好 `jss`（需要系统扫描并决定统一默认）。
 - 阶段 1 的“no_scale 基线崩溃”并非对所有数据集都成立：ETTh1 不崩溃，但 Electricity/ECL 上 `no_scale + timeF` 会在 epoch1 直接 NaN。
-- prior 的“物理先验”尚未完成：ETT 目前用训练段 `max(abs(x))×slack` 做初始化；ECL 的 `prior_scale` 对结果非常敏感，需要更稳健的先验设定流程（并记录推导过程）。
+- prior 的“物理先验”尚未完成：ETT 目前用训练段 `max(abs(x))×slack` 做初始化；ECL（`target=OT`，训练段 `max≈5653`）上 `prior_scale` 对结果非常敏感，已观察到 `prior_scale≈5000` 明显优于 `1e5` 量级（仍需形成可解释的先验设定流程并记录推导过程）。
 - GPU 利用率仍偏低：已做 DataLoader/AMP/non_blocking 优化，并将 ETT/Custom 数据缓存为 float32、训练/验证 loss 统计改为“张量累加+每 epoch `.item()` 一次”（减少每 step 同步）；后续可优先尝试更大 batch、TF32、`torch.compile` 等进一步提升吞吐。
