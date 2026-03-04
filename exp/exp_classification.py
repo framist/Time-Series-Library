@@ -45,7 +45,8 @@ class Exp_Classification(Exp_Basic):
         return criterion
 
     def vali(self, vali_data, vali_loader, criterion):
-        total_loss = []
+        loss_sum = torch.zeros((), device=self.device, dtype=torch.float32)
+        loss_count = 0
         preds = []
         trues = []
         self.model.eval()
@@ -65,12 +66,13 @@ class Exp_Classification(Exp_Basic):
 
                 pred = outputs.detach()
                 loss = criterion(pred, label.long().squeeze())
-                total_loss.append(loss.item())
+                loss_sum += loss.detach().float()
+                loss_count += 1
 
                 preds.append(outputs.detach())
                 trues.append(label)
 
-        total_loss = np.average(total_loss)
+        total_loss = (loss_sum / max(1, loss_count)).item()
 
         preds = torch.cat(preds, 0)
         trues = torch.cat(trues, 0)
@@ -104,7 +106,8 @@ class Exp_Classification(Exp_Basic):
 
         for epoch in range(self.args.train_epochs):
             iter_count = 0
-            train_loss = []
+            train_loss_sum = torch.zeros((), device=self.device, dtype=torch.float32)
+            train_loss_count = 0
 
             self.model.train()
             epoch_time = time.time()
@@ -123,7 +126,8 @@ class Exp_Classification(Exp_Basic):
                 with torch.cuda.amp.autocast(enabled=use_amp):
                     outputs = self.model(batch_x, padding_mask, None, None)
                     loss = criterion(outputs, label.long().squeeze(-1))
-                train_loss.append(loss.item())
+                train_loss_sum += loss.detach().float()
+                train_loss_count += 1
 
                 if (i + 1) % 100 == 0:
                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
@@ -145,7 +149,7 @@ class Exp_Classification(Exp_Basic):
                     model_optim.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
-            train_loss = np.average(train_loss)
+            train_loss = (train_loss_sum / max(1, train_loss_count)).item()
             vali_loss, val_accuracy = self.vali(vali_data, vali_loader, criterion)
             test_loss, test_accuracy = self.vali(test_data, test_loader, criterion)
 

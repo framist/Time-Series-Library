@@ -41,7 +41,8 @@ class Exp_Anomaly_Detection(Exp_Basic):
         return criterion
 
     def vali(self, vali_data, vali_loader, criterion):
-        total_loss = []
+        loss_sum = torch.zeros((), device=self.device, dtype=torch.float32)
+        loss_count = 0
         self.model.eval()
         max_val_steps = getattr(self.args, 'max_val_steps', -1)
         use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
@@ -61,8 +62,9 @@ class Exp_Anomaly_Detection(Exp_Basic):
                 true = batch_x.detach()
 
                 loss = criterion(pred, true)
-                total_loss.append(loss.item())
-        total_loss = np.average(total_loss)
+                loss_sum += loss.detach().float()
+                loss_count += 1
+        total_loss = (loss_sum / max(1, loss_count)).item()
         self.model.train()
         return total_loss
 
@@ -88,7 +90,8 @@ class Exp_Anomaly_Detection(Exp_Basic):
 
         for epoch in range(self.args.train_epochs):
             iter_count = 0
-            train_loss = []
+            train_loss_sum = torch.zeros((), device=self.device, dtype=torch.float32)
+            train_loss_count = 0
 
             self.model.train()
             epoch_time = time.time()
@@ -107,7 +110,8 @@ class Exp_Anomaly_Detection(Exp_Basic):
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, :, f_dim:]
                 loss = criterion(outputs, batch_x)
-                train_loss.append(loss.item())
+                train_loss_sum += loss.detach().float()
+                train_loss_count += 1
 
                 if (i + 1) % 100 == 0:
                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
@@ -126,7 +130,7 @@ class Exp_Anomaly_Detection(Exp_Basic):
                     model_optim.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
-            train_loss = np.average(train_loss)
+            train_loss = (train_loss_sum / max(1, train_loss_count)).item()
             vali_loss = self.vali(vali_data, vali_loader, criterion)
             test_loss = self.vali(test_data, test_loader, criterion)
 

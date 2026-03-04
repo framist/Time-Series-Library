@@ -9,7 +9,7 @@
 先探索，保证完全理解背景和此代码仓库再动手，你可以修改 AGENTS.md 以 记录信息与经验。
 
 进行 制定计划 -> 进行代码修改 -> 测试（伴随调参再进行测试） -> 整理记录（可以使用 git 在 PG 分支自由推进 commit）的循环直到完成用户要求下的所有所需实验 -- 不同数据集、不同任务、论文中提到的不同方法，
-记录必要的实验说明到 WVEmbs.md，实验结果整理并总结到 Report.md，运行实验的可复用经验记录到 AGENTS.md。务必一旦有值得记录的内容就及时总结和记录，不必等全流程完成后再回头总结
+记录必要的实验说明到 WVEmbs.md，实验结果整理并总结到 Report.md，运行实验的可复用经验记录到 AGENTS.md。务必一旦有值得记录的内容就及时总结和记录，不必等全流程完成后再回头总结。这三个文档都可以清理过时内容，保持最新的实验进展和结论。
 
 
 ## 环境
@@ -140,4 +140,4 @@
 - `wv` 统一模式与 `wv_sampling`/`scale_mode` 有强交互：目前观察到 ETTh1 上 `wv_sampling=iss` 能显著改善 `no_scale + wv`，而 `prior + wv` 更偏好 `jss`（需要系统扫描并决定统一默认）。
 - 阶段 1 的“no_scale 基线崩溃”并非对所有数据集都成立：ETTh1 不崩溃，但 Electricity/ECL 上 `no_scale + timeF` 会在 epoch1 直接 NaN。
 - prior 的“物理先验”尚未完成：ETT 目前用训练段 `max(abs(x))×slack` 做初始化；ECL 的 `prior_scale` 对结果非常敏感，需要更稳健的先验设定流程（并记录推导过程）。
-- GPU 利用率仍偏低：已做 DataLoader/AMP/non_blocking 优化；后续可优先尝试更大 batch、TF32、`torch.compile`、减少训练 loop 的每 step 同步（`loss.item()` 等）以进一步提升吞吐。
+- GPU 利用率仍偏低：已做 DataLoader/AMP/non_blocking 优化，并将 ETT/Custom 数据缓存为 float32、训练/验证 loss 统计改为“张量累加+每 epoch `.item()` 一次”（减少每 step 同步）；后续可优先尝试更大 batch、TF32、`torch.compile` 等进一步提升吞吐。
