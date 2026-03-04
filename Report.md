@@ -58,6 +58,22 @@ prior 参数（用于阶段 1 的组 C）：
 - `prior_scale = [47.288, 17.682, 42.57, 13.788, 15.778, 6.092, 92.014]`
 - `prior_offset = 0`
 
+### Forecast（ETTh1，多 Backbone）
+
+对应 `AGENTS.md` 的 Cycle 2（先跑 stage0 口径，inverse=False）：在 ETTh1 forecast 上，对多个 backbone 运行 `timeF / wv_timeF / wv` 三种 embed，对比其 MSE/MAE（缩放空间）。
+
+- 统一设置：`seq_len=96,label_len=48,pred_len=96,features=M,epochs=10`，默认启用 `--use_amp`
+- 脚本：`scripts/wvembs/forecast_etth1_multi_backbone.sh`
+- WV 参数：`wv_timeF` 使用 `wv_sampling=jss`；`wv`（统一模式）使用 `wv_sampling=iss`（`wv_jss_std=1.0,wv_base=10000`）
+
+| backbone | timeF (MSE/MAE) | wv_timeF (jss) | wv（统一, iss） |
+|---|---:|---:|---:|
+| Transformer | 0.898969 / 0.750573 | 0.651870 / 0.610376 | 0.592109 / 0.582957 |
+| TimesNet | 0.389437 / 0.412179 | 0.413257 / 0.430636 | 0.443232 / 0.447578 |
+| Nonstationary_Transformer | 0.569199 / 0.529879 | 0.853976 / 0.596071 | 1.045712 / 0.705285 |
+| Autoformer | 0.465239 / 0.467973 | 0.609232 / 0.561374 | 0.509174 / 0.474881 |
+| TimeMixer | 0.384408 / 0.398894 | 0.372538 / 0.396425 | 0.373161 / 0.395769 |
+
 ### Forecast（ETTm1，Transformer）
 
 设置同 ETTh1（`seq_len=96,label_len=48,pred_len=96,features=M`；`d_model=512,d_ff=2048,n_heads=8,epochs=10,batch=32`），默认启用 `--use_amp`。
