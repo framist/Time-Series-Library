@@ -141,3 +141,27 @@
 - 阶段 1 的“no_scale 基线崩溃”并非对所有数据集都成立：ETTh1 不崩溃，但 Electricity/ECL 上 `no_scale + timeF` 会在 epoch1 直接 NaN。
 - prior 的“物理先验”尚未完成：ETT 目前用训练段 `max(abs(x))×slack` 做初始化；ECL（`target=OT`，训练段 `max≈5653`）上 `prior_scale` 对结果非常敏感，已观察到 `prior_scale≈5000` 明显优于 `1e5` 量级（仍需形成可解释的先验设定流程并记录推导过程）。
 - GPU 利用率仍偏低：已做 DataLoader/AMP/non_blocking 优化，并将 ETT/Custom 数据缓存为 float32、训练/验证 loss 统计改为“张量累加+每 epoch `.item()` 一次”（减少每 step 同步）；后续可优先尝试更大 batch、TF32、`torch.compile` 等进一步提升吞吐。
+
+## 阶段性补充（2026-03-05）
+
+### JSS std 扫描：ETTh1 Forecast（Transformer，阶段 0，inverse=False）
+
+结论：在统一模式 `--embed wv` 下，`wv_sampling=jss` 的 `wv_jss_std` 对结果极其敏感，且最优区间显著小于 `1.0`。
+
+记录（来自 `result_long_term_forecast.txt` 中 `JSSStdScan` 条目；同一训练预算/口径下的对比）：
+
+- `embed=wv, wv_sampling=jss`
+  - `wv_jss_std=0.25`：MSE=0.525155，MAE=0.518654
+  - `wv_jss_std=0.1`：MSE=0.526762，MAE=0.511221（MAE 更优，但 MSE 略差）
+  - `wv_jss_std=0.5`：MSE=0.582721，MAE=0.557427（明显退化）
+- `embed=wv_timeF, wv_sampling=jss`
+  - `wv_jss_std=0.25`：MSE=0.547726，MAE=0.530639（相较此前 `wv_jss_std=1.0` 的 `wv_timeF(jss)` 明显改善）
+
+对比：当前 `Report.md` 的阶段 0“最终表”仍采用 `wv(iss)` 与 `wv_timeF(jss,std=1.0)`；上述扫描结果尚未写入 `Report.md`（先作为阶段性发现保存在这里，等待确定新的最终配置与可复现脚本后再更新 Report）。
+
+### 交互现象（重要）
+
+同样在 ETTh1 Forecast 的阶段 1（inverse=True、`scale_mode=prior` 的组 C）下，直接沿用 `jss_std=0.25` 会显著变差：
+- `C: prior + wv(jss,std=0.25)`：MSE=33.1530，MAE=3.5491（远差于当前报告中 prior + wv 的结果）
+
+提示：`wv_jss_std` 与 `scale_mode/是否 inverse` 可能存在强交互；阶段 0 的最优 `jss_std` 不应直接迁移到阶段 1 的 prior 对照里，需要分别扫描或设计解释性消融。
