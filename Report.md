@@ -74,6 +74,16 @@ prior 参数（用于阶段 1 的组 C）：
 | Autoformer | 0.465239 / 0.467973 | 0.609232 / 0.561374 | 0.509174 / 0.474881 |
 | TimeMixer | 0.384408 / 0.398894 | 0.372538 / 0.396425 | 0.373161 / 0.395769 |
 
+最小调优（只调 WV 参数；其余超参与上表一致）：
+
+- 脚本：`scripts/wvembs/forecast_etth1_tune_wv_params.sh`
+- 关键发现：不同 backbone 对 `wv_sampling/jss_std/base` 的偏好差异很大；同一个默认配置（例如统一用 `jss,std=1.0`）会造成“看起来 WVEmbs 不通用”的假象。
+
+| backbone | embed | wv_sampling | wv_jss_std | wv_base | MSE | MAE |
+|---|---|---|---:|---:|---:|---:|
+| Autoformer | wv_timeF | iss | 1.0 | 10000 | 0.402689 | 0.433453 |
+| Nonstationary_Transformer | wv（统一） | jss | 0.25 | 10000 | 0.535381 | 0.506600 |
+
 ### Forecast（ETTm1，Transformer）
 
 设置同 ETTh1（`seq_len=96,label_len=48,pred_len=96,features=M`；`d_model=512,d_ff=2048,n_heads=8,epochs=10,batch=32`），默认启用 `--use_amp`。
