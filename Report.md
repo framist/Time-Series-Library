@@ -136,6 +136,22 @@ prior 参数（组 C）：
 
 prior 参数（用于阶段 1 的组 C）：同 Forecast/ETTh1 的 7 通道 `prior_scale`。
 
+### Imputation（ETTh1，多 Backbone）
+
+对应 `AGENTS.md` 的 Cycle 2（stage0 口径，inverse=False）：在 ETTh1 imputation 上，对多个 backbone 运行 `timeF / wv_timeF / wv` 三种 embed，对比其 MSE/MAE（缩放空间）。
+
+- 统一设置：`seq_len=96,mask_rate=0.125,features=M,epochs=10`，默认启用 `--use_amp`
+- 脚本：`scripts/wvembs/imputation_etth1_multi_backbone.sh`（含 TimeMixer 的必要特判）
+- WV 参数：`wv_timeF/wv` 均使用 `wv_sampling=iss`（`wv_jss_std=1.0,wv_base=10000`）
+
+| backbone | timeF (MSE/MAE) | wv_timeF (iss) | wv（统一, iss） |
+|---|---:|---:|---:|
+| Transformer | 0.064919 / 0.182104 | 0.077267 / 0.194725 | 0.060508 / 0.173853 |
+| TimesNet | 0.061682 / 0.167563 | 0.080913 / 0.198272 | 0.070635 / 0.182095 |
+| Nonstationary_Transformer | 0.048058 / 0.146674 | 0.053733 / 0.157275 | 0.079320 / 0.184283 |
+| Autoformer | 0.092512 / 0.221572 | 0.142418 / 0.279118 | 0.229470 / 0.374992 |
+| TimeMixer | 0.099541 / 0.204953 | 0.125847 / 0.238145 | 0.143213 / 0.255684 |
+
 ### Imputation（ETTm1，TimesNet）
 
 设置同 ETTh1（`seq_len=96,mask_rate=0.125,features=M`；`d_model=16,d_ff=32,top_k=3,epochs=10,batch=16,lr=1e-3`），默认启用 `--use_amp`。
