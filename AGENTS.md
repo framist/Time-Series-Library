@@ -9,7 +9,7 @@
 先探索，保证完全理解背景和此代码仓库再动手，你可以修改 AGENTS.md 以 记录信息与经验。
 
 进行 制定计划 -> 进行代码修改 -> 测试（伴随调参再进行测试） -> 整理记录（可以使用 git 在 PG 分支自由推进 commit）的循环直到完成用户要求下的所有所需实验 -- 不同数据集、不同任务、论文中提到的不同方法，
-记录必要的实验说明到 WVEmbs.md，实验结果整理并总结到 Report.md，运行实验的可复用经验记录到 AGENTS.md。务必一旦有值得记录的内容就及时总结和记录，不必等全流程完成后再回头总结。这三个文档都可以清理过时内容，保持最新的实验进展和结论。
+记录必要的实验说明到 WVEmbs.md，实验结果整理并总结到 Report.md，运行实验的可复用经验记录到 AGENTS.md。务必一旦有值得记录的内容就及时总结和记录，不必等全流程完成后再回头总结。这三个文档都可以**清理过时内容**，只保持最新的实验进展和结论。特别避免 AGENTS.md 内容过于冗杂，保持它作为一个“快速信息与经验”文档的清晰和实用。
 
 
 ## 环境
@@ -44,10 +44,44 @@
 - 设备稳健性：`exp/exp_basic.py` 在 CUDA/MPS 不可用时自动回退 CPU，并同步 `args.use_gpu` / `args.device`，避免无 GPU 环境直接崩溃。
   - 掩码增强参数（训练期生效）：`--wv_mask_prob` / `--wv_mask_type` / `--wv_mask_phi_max` / `--wv_mask_dlow_min`。
 
+## Cycle 0 产物：数据集准备与 prior_scale 粗估（2026-03-05）
+
+### 数据集文件（已落盘到 `./dataset/`）
+
+- 下载脚本：`scripts/wvembs/download_datasets.py`
+- 已补齐（计划 Cycle 0）：
+  - ETT：`dataset/ETT-small/ETTh2.csv`、`dataset/ETT-small/ETTm2.csv`
+  - Weather：`dataset/weather/weather.csv`
+  - UEA 分类：`dataset/EthanolConcentration/*`、`dataset/FaceDetection/*`（Heartbeat 原已存在）
+    - 备注：示例数据集 `HandMovementDirection` 在 HF 仓库中缺失（脚本会 warn 并跳过）
+
+### prior_scale 建议值（slack=2.0，训练段 max(|x|) × slack）
+
+估算脚本：`scripts/wvembs/estimate_prior_scale.py`
+
+- ETTh1 (features=M, 7D)：`47.288 17.682 42.57 13.788 15.778 6.092 92.014`
+- ETTm1 (features=M, 7D)：`48.36 18.218 44.206 14.356 16.326 6.092 92.014`
+- ETTh2 (features=M, 7D)：`215.786 72.878 186.46 57.472 34.436 62.924 116.875`
+- ETTm2 (features=M, 7D)：`215.786 72.878 186.46 59.616 34.436 62.924 116.875`
+- Weather (custom, features=M, 21D)：`2040.14 69.6 618.26 41 200 111.34 48.32 84.2 30.8 49.06 2637.04 19998 45.8 720 22.4 1200 2230.58 4263.52 19998 98.18 19998`
+- Electricity (custom, features=M, 321D)：建议用 **标量**（global max）`1.528e+06`（脚本 `--reduce global_max`）
+
+### GPU 预算探测（ETTh1 Forecast, Transformer, features=M）
+
+脚本：`scripts/wvembs/gpu_budget_probe_etth1.sh`
+
+- 设备：RTX 4060 Laptop (8GB)
+- 配置：`epochs=10, batch=32, d_model=512, d_ff=2048, n_heads=8, e_layers=2, d_layers=1, seq_len=96, pred_len=96, embed=timeF, use_amp=1`
+- 训练 epoch 耗时（秒）：`13.47, 10.45, 9.84, 12.67, 11.66, 10.88, 12.34, 8.43, 10.18, 9.18`
+  - 总计（仅 epoch 内训练段，不含 vali/test）：`109.11s`
+  - 平均：`10.91s/epoch`
+- 峰值显存（nvidia-smi 轮询）：`~869 MB`
+  - 结果目录：`results/gpu_probe_etth1_20260305_010832/`
+
 
 ## Plan: WVEmbs 全流程实验（迭代循环）
 
-注意：计划的细节不一定正确，实现前需要加以判断，可以调整
+注意：计划的细节不一定正确，实现前需要加以判断，可以调整。暂时无法完成可以跳过，但需要记录原因和后续计划。
 
 **TL;DR**：基于 AGENTS.md 的阶段 0-5，将未完成实验组织为 7 个迭代循环（Cycle 0-6），每个循环遵循"计划→代码→测试→记录"的流程。核心目标是同时推进**广度覆盖**（多 backbone × 多数据集 × 多任务）和**深度论证**（无量纲化核心价值 + JSS 深化 + 掩码消融）。兼容模型限制为 WVEmbs 适配的模型（iTransformer / PatchTST / DLinear 均**不兼容**）。
 
