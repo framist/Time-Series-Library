@@ -123,62 +123,6 @@ python -u run.py \
 
 对照实验可将 `--embed wv` 改回 `--embed timeF`（传统基线），或改为 `--embed wv_timeF`（消融：值用 WVEmbs、时间仍用传统嵌入）。
 
-#### 离线 toy 数据（custom）快速验证（无需下载任何公开数据）
-
-当 HF 自动下载不可用（例如网络/SSL 问题）时，可用一个很小的 `custom` CSV 验证“数据管线 + 训练/测试 + WVEmbs 透传”是否完整跑通：
-
-```bash
-mkdir -p /tmp/wvembs_toy
-python - <<'PY'
-import pandas as pd, numpy as np
-from datetime import datetime, timedelta
-
-n = 2000
-start = datetime(2020, 1, 1)
-dates = [start + timedelta(hours=i) for i in range(n)]
-t = np.arange(n)
-rng = np.random.default_rng(0)
-df = pd.DataFrame({
-    "date": [d.strftime("%Y-%m-%d %H:%M:%S") for d in dates],
-    "f1": np.sin(t / 24 * 2 * np.pi),
-    "f2": np.cos(t / 24 * 2 * np.pi),
-    "OT": np.sin(t / 50 * 2 * np.pi) + 0.05 * rng.standard_normal(n),
-})
-df.to_csv("/tmp/wvembs_toy/toy.csv", index=False)
-print("saved:", "/tmp/wvembs_toy/toy.csv", "rows=", len(df))
-PY
-```
-
-示例（Autoformer，`features=M` 因此 `enc_in/dec_in/c_out=3`）：
-
-```bash
-python -u run.py \
-  --task_name long_term_forecast --is_training 1 \
-  --root_path /tmp/wvembs_toy/ --data_path toy.csv \
-  --model_id wvembs_toy --model Autoformer --data custom --features M --target OT \
-  --freq h --seq_len 96 --label_len 48 --pred_len 96 \
-  --enc_in 3 --dec_in 3 --c_out 3 \
-  --d_model 32 --d_ff 64 --n_heads 4 --e_layers 2 --d_layers 1 \
-  --train_epochs 1 --batch_size 4 --num_workers 0 \
-  --max_train_steps 1 --max_val_steps 1 --max_test_steps 1 \
-  --embed wv --checkpoints ./checkpoints_wvembs/ --no_use_gpu \
-  --itr 1
-```
-
-### Fast dev run 记录（仅验证流程，不代表结论）
-
-> 2026-03-02：ETTh1 + Transformer（CPU），`train_epochs=1` 但限制 `max_train_steps=2/max_val_steps=1/max_test_steps=1`，用于快速验证“能训练 + 能测试 + 能输出指标”。
-
-- `embed=timeF`：MSE=1.3888828，MAE=0.8271001
-- `embed=wv_timeF`：MSE=2.0715535，MAE=1.0934823
-
-备注：该记录仅用于确认代码路径与可复现命令无误；由于训练步数极少，指标波动很大，不应用于判断 WVEmbs 的真实收益。
-
-> 2026-03-02：离线 toy 数据（`data=custom`，CPU），`max_train_steps=1/max_val_steps=1/max_test_steps=1`，用于验证更多 backbone 的 WV 参数透传与训练/测试流程（指标无意义，只看“能跑通”）。
-
-- Autoformer（`embed=wv_timeF,label_len=48`）：MSE=1.8680178，MAE=1.1670070
-- FEDformer（`embed=wv_timeF,label_len=48`）：MSE=1.5518832，MAE=1.0816071
-- MICN（`embed=wv_timeF,label_len=96`）：MSE=1.4754682，MAE=1.0594077（注意 MICN 官方脚本默认 `label_len=seq_len`）
 
 ## 阶段 0/1 最终结论（2026-03-05）
 
@@ -197,20 +141,6 @@ python -u run.py \
   - `scale_mode=none` 的“基线崩溃”并非在所有数据集上成立：ETTh1 不崩溃，但 Electricity(ECL) 上 `no_scale+timeF` 会出现 NaN
   - prior 的“物理先验”仍待补齐：ETT 目前用训练段 `max(abs(x))×slack` 做初始化；ECL 上 `prior_scale` 对结果非常敏感（目前观察到 `target=OT` 时 `prior_scale≈5000` 明显优于 `1e5` 量级），需要更稳健且可解释的先验设定流程
   - anomaly/classification 任务通常没有显式时间特征（`x_mark=None`），因此 `embed=wv` 更像是“值 WVEmbs + 额外零时间通道”的补齐项；脚本里已明确标注该解释。
-
-## 下一步实验建议（先做 backbone 提升验证）
-
-建议先固定数据集与训练预算（例如 ETTh1 / `seq_len=96,pred_len=96` / `d_model=64` / 1~3 epoch），对比：
-- Backbone：`Transformer` / `Informer` / `TimesNet` / `Autoformer` / `FEDformer`
-- Embed：`timeF` vs `wv_timeF`（消融） vs `wv`（统一）
-
-对应的最小预算脚本：
-- `scripts/wvembs/forecast_etth1_backbones.sh`
-- `scripts/wvembs/forecast_etth1_mask_ablation.sh`（mask 消融 + dlow\_limited 示例）
-
-记录口径：
-- 训练/验证/测试的 MSE、MAE（TSLib 默认输出）
-- 训练耗时与显存占用（如果需要可后续补）
 
 ## 各任务最小脚本（需要数据集）
 
