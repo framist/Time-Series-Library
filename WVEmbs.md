@@ -124,7 +124,7 @@ python -u run.py \
 对照实验可将 `--embed wv` 改回 `--embed timeF`（传统基线），或改为 `--embed wv_timeF`（消融：值用 WVEmbs、时间仍用传统嵌入）。
 
 
-## 阶段 0-4 当前结论（2026-03-05）
+## 阶段 0-5 当前结论（2026-03-05）
 
 - 对齐上游口径：
   - 阶段 0（embed 对照）：不传 `--inverse`（指标在缩放空间，对齐 `scripts/*/ETT_script/*.sh` 默认）
@@ -142,6 +142,14 @@ python -u run.py \
   - wv_base 影响较小：wv_base=100 最优，比默认 10000 改善 ~19%
   - ETTh2 跨数据集验证确认同样的反向交互趋势
   - 可视化图表：`results/cycle4_heatmap.pdf`、`results/cycle4_wvbase.pdf`、`results/cycle4_etth2.pdf`
+- Cycle 5 关键发现（掩码消融 + 外推 + 跨数据集验证）：
+  - **phase_rotate 是最优掩码类型**：所有 prob/dlow_min 组合均优于基线，最佳 MSE=19.490（-14.7%）
+  - **scale 外推模式显著改善**：scale=5.0 达 MSE=15.866（-30.6%），机制为降低相位折叠
+  - **跨数据集迁移性有限**：
+    - ETTm1：叠加(mask+extrap)最佳（MSE -6.9%），extrap 单独 -3.3%，掩码单独 +5.0%
+    - Weather：所有配置与基线差异 < 0.1%，掩码和外推均无显著效果
+    - 改善程度与数据集特性强相关，ETTh1 的大幅改善不可泛化
+  - 可视化图表：`results/cycle5_mask_heatmap.pdf`、`results/cycle5_extrap_bar.pdf`
 - 其他早期发现（保留作为参考）：
   - `scale_mode=none` 的“基线崩溃”并非只在 ECL 出现：ETTh2/ETTm2/Weather 的 `A: none+timeF` 也 NaN
   - anomaly/classification 任务中 WVEmbs 均未带来收益
@@ -178,6 +186,11 @@ python -u run.py \
 - Cycle 4——Forecast（ETTh1 + wv_base 扫描）：`scripts/wvembs/forecast_etth1_cycle4_wvbase.sh`
 - Cycle 4——Forecast（ETTh2 + jss_std 跨数据集验证）：`scripts/wvembs/forecast_etth2_cycle4_jssstd.sh`
 - Cycle 4——可视化脚本：`scripts/wvembs/plot_cycle4.py`
+- Cycle 5——Forecast（ETTh1 + 掩码消融）：`scripts/wvembs/forecast_etth1_cycle5_mask.sh`
+- Cycle 5——Forecast（ETTh1 + 外推实验）：`scripts/wvembs/forecast_etth1_cycle5_extrap.sh`
+- Cycle 5——Forecast（ETTm1/Weather 跨数据集验证）：`scripts/wvembs/forecast_cycle5_crossval.sh`
+- Cycle 5——可视化脚本：`scripts/wvembs/plot_cycle5.py`
+- Cycle 6——Forecast（多数据集 × 多 pred_len × 3 配置）：`scripts/wvembs/forecast_cycle6_table1.sh`
 
 ## 备注（与“分布无关”目标的差距）
 

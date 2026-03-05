@@ -108,6 +108,8 @@ if __name__ == '__main__':
                         help='值域外推策略：direct=直接映射；scale=相位缩放（x / wv_extrap_scale）')
     parser.add_argument('--wv_extrap_scale', type=float, default=1.0,
                         help='scale 外推的缩放因子 s（>1 降低相位推进速度；只在 wv_extrap_mode=scale 时使用）')
+    parser.add_argument('--wv_extrap_eval', action='store_true', default=False,
+                        help='测试阶段启用域内/域外分组统计（用于外推性能评估）')
 
     # optimization
     parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')

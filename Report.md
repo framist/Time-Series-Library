@@ -340,8 +340,95 @@ prior 参数（用于阶段 1 的组 C）：同 Forecast/ETTm1 的 7 通道 `pri
    - jss 在多数场景下优于 iss（特别是 standard+jss 明显优于 standard+iss）
    - wv_base 可作为附录消融，推荐默认 100–500
 
+## Cycle 5: 掩码消融 + 外推实验
+
+说明：本节为 Cycle 5 的正式全预算结果（`epochs=10`），统一使用 `--inverse`（原始物理量尺度）。
+固定配置：`embed=wv, wv_sampling=iss, scale_mode=none`（即 Cycle 4 的 `none+iss` 基线）。
+
+对应脚本：
+- `scripts/wvembs/forecast_etth1_cycle5_mask.sh`（掩码消融，18 组）
+- `scripts/wvembs/forecast_etth1_cycle5_extrap.sh`（外推实验，4 组）
+- `scripts/wvembs/forecast_cycle5_crossval.sh`（跨数据集验证，8 组）
+
+### Step 1: 掩码消融（ETTh1，Transformer，embed=wv，none+iss）
+
+基线（无掩码，Cycle 4 `none+iss`）：MSE=22.857
+
+扫描维度：`wv_mask_type` × `wv_mask_prob` × `wv_mask_dlow_min`
+
+| mask_type | mask_prob | dlow_min=0 (MSE/MAE) | dlow_min=4 (MSE/MAE) |
+|---|---|---:|---:|
+| zero | 0.1 | 25.628 / 3.106 | 26.574 / 3.131 |
+| zero | 0.3 | 21.079 / 2.830 | 23.483 / 2.979 |
+| zero | 0.5 | 26.992 / 3.136 | 26.208 / 3.064 |
+| arcsine | 0.1 | 24.197 / 2.966 | 26.257 / 3.115 |
+| arcsine | 0.3 | 21.408 / 2.875 | 21.900 / 2.920 |
+| arcsine | 0.5 | 22.530 / 2.865 | 23.276 / 2.927 |
+| **phase_rotate** | **0.1** | 20.292 / 2.718 | **19.490 / 2.671** ★ |
+| phase_rotate | 0.3 | 19.974 / 2.698 | 20.195 / 2.704 |
+| phase_rotate | 0.5 | 19.818 / 2.707 | 19.891 / 2.713 |
+
+掩码消融结论：
+- **phase_rotate 全面优于 zero 和 arcsine**：所有 prob/dlow_min 组合下均优于基线，MSE 范围 19.5–20.3 vs 基线 22.857
+- **最佳掩码**：`phase_rotate, prob=0.1, dlow_min=4`（MSE=19.490，-14.7%）
+- zero/arcsine 表现不稳定，部分配置反而劣于无掩码基线
+- dlow_min=4（保护低频）在 phase_rotate 上效果略好，但在 zero/arcsine 上无一致规律
+
+### Step 2: 外推实验（ETTh1，Transformer，embed=wv，none+iss）
+
+基线（direct 模式，不缩放）：MSE=22.857
+
+| extrap_mode | extrap_scale | MSE | MAE |
+|---|---|---:|---:|
+| direct | 1.0 | 22.857 | 2.881 |
+| scale | 1.5 | 17.378 | 2.579 |
+| scale | 2.0 | 17.559 | 2.633 |
+| **scale** | **5.0** | **15.866** | **2.706** |
+
+外推结论：
+- **scale 外推模式显著改善性能**：scale=5.0 达到 MSE=15.866（-30.6%），即使 ETTh1 测试集无域外样本
+- scale 模式本质是缩小 WVEmbs 内部相位推进速度（`x/s` 替代 `x`），降低高频相位折叠，类似于拓宽先验值域
+- 这解释了为何 `prior` scale_mode（值域压缩到 [-1,1]）在 Cycle 4 中也能获益——都是减少相位碰撞的机制
+- 注：ETTh1 测试集 2785 样本中 0 个域外样本（全部在训练集值域内），因此此改善完全来自相位编码的数值稳定性提升
+
+### Step 3: 跨数据集验证（ETTm1 + Weather）
+
+验证 Cycle 5 在 ETTh1 上的最佳配置是否跨数据集成立。
+
+测试配置：
+- A: 基线（无掩码，无外推）
+- B: 最佳掩码（phase_rotate, prob=0.1, dlow_min=4）
+- C: 最佳外推（scale=5.0）
+- D: 叠加（mask + extrap）
+
+| 配置 | ETTm1 MSE | ETTm1 MAE | vs baseline | Weather MSE | Weather MAE | vs baseline |
+|---|---:|---:|---:|---:|---:|---:|
+| A: 基线(none+iss) | 9.451 | 1.889 | — | 64848.66 | 115.54 | — |
+| B: 掩码(phase_rotate,p=0.1,d=4) | 9.926 | 1.917 | +5.0% ❌ | 64814.95 | 115.49 | -0.05% ≈ |
+| C: 外推(scale=5.0) | 9.142 | 2.007 | **-3.3%** ✅ | 64856.21 | 115.46 | +0.01% ≈ |
+| D: 叠加(mask+extrap) | **8.799** | 1.902 | **-6.9%** ✅ | 64850.43 | 115.47 | +0.003% ≈ |
+
+### Cycle 5 可视化
+
+- 掩码消融热力图：`results/cycle5_mask_heatmap.pdf`（及 `.png`）
+- 外推柱状图：`results/cycle5_extrap_bar.pdf`（及 `.png`）
+
+### Cycle 5 结论
+
+1. **phase_rotate 是最有效的掩码策略**：在 ETTh1 所有 prob/dlow_min 组合下均改善性能，最佳 MSE=19.490（-14.7%）
+2. **scale 外推模式带来最大单项改善**：ETTh1 scale=5.0 达 MSE=15.866（-30.6%），机制为降低相位折叠
+3. **跨数据集迁移性有限**：
+   - ETTm1：外推有效（-3.3%），叠加(mask+extrap)最佳（-6.9%），但掩码单独无效（+5.0%）
+   - Weather：所有配置与基线差异 < 0.1%，掩码和外推均无显著效果
+   - 改善程度与数据集特性强相关，ETTh1 的大幅改善不可泛化
+4. **对论文的启示**：
+   - `wv_extrap_scale=5.0` 在 ETTh1/ETTm1 上有益，Weather 上无害，可作为默认配置
+   - `phase_rotate` 掩码效果不稳定（ETTh1 ✅、ETTm1 ❌、Weather ≈），建议仅在消融表中展示
+   - 叠加策略在 ETTm1 上优于任一单项，但 Weather 上无效——说明两种机制的增益依赖于数据的值域/频率分布特性
+
 ## 未完成问题与下一步
 
-- Cycle 4 已完成：三因素扫描、wv_base 扫描、跨数据集验证均已完成，可视化图表已生成。
-- 下一步进入 Cycle 5（掩码消融 + 外推实验）或 Cycle 6（最终调优 + 多 pred_len + 论文表格产出）。
-- 关键待解决：在 Cycle 6 中利用 Cycle 4 结论，按 scale_mode 分档设定最终 jss_std。
+- Cycle 5 跨数据集验证已完成（ETTm1 + Weather），结论见上。
+- 下一步进入 Cycle 6（最终调优 + 多 pred_len + 论文表格产出）。
+- 关键待解决：综合 Cycle 4（jss_std 分档）+ Cycle 5（掩码+外推）确定论文最终推荐配置。
+- Cycle 6 核心脚本已就绪：`scripts/wvembs/forecast_cycle6_table1.sh`（60 组实验）。

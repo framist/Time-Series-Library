@@ -179,6 +179,24 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             print('loading model')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
 
+        # ── 外推评估：计算训练集每通道 max(|x|) ──
+        extrap_eval = getattr(self.args, 'wv_extrap_eval', False)
+        train_max_abs = None
+        if extrap_eval:
+            train_data, _ = self._get_data(flag='train')
+            # 获取原始值空间下的训练集最大绝对值（逆变换后）
+            raw_train = train_data.data_x  # [N, M] 或 [N, T, M]
+            if raw_train.ndim == 2:
+                train_abs = np.abs(raw_train)
+            else:
+                train_abs = np.abs(raw_train).reshape(-1, raw_train.shape[-1])
+            if train_data.scale:
+                # 数据经过了缩放，需要逆变换还原到原始值域
+                train_abs_inv = np.abs(train_data.inverse_transform(train_abs))
+                train_max_abs = train_abs_inv.max(axis=0)  # [M]
+            else:
+                train_max_abs = train_abs.max(axis=0)  # [M]
+            print(f'[ExtrapEval] train_max_abs per channel: {train_max_abs}')
         preds = []
         trues = []
         folder_path = './test_results/' + setting + '/'
@@ -264,9 +282,40 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
         mae, mse, rmse, mape, mspe = metric(preds, trues)
         print('mse:{}, mae:{}, dtw:{}'.format(mse, mae, dtw))
+
+        # ── 外推评估：域内/域外分组统计 ──
+        extrap_info = ''
+        if extrap_eval and train_max_abs is not None and self.args.inverse:
+            f_dim = -1 if self.args.features == 'MS' else 0
+            # train_max_abs 可能是全通道，需要按 f_dim 切片
+            if f_dim == -1:
+                t_max = train_max_abs[-1:]  # [1]
+            else:
+                t_max = train_max_abs  # [M]
+            # 每个样本：检查 ground truth 是否超出训练集范围
+            # trues: [N, T, M']
+            sample_max = np.abs(trues).max(axis=1)  # [N, M']
+            ood_mask = np.any(sample_max > t_max, axis=1)  # [N]
+            n_in = int((~ood_mask).sum())
+            n_out = int(ood_mask.sum())
+            print(f'[ExtrapEval] in-domain: {n_in}, out-of-domain: {n_out} (total: {len(ood_mask)})')
+            if n_in > 0:
+                mae_in, mse_in, _, _, _ = metric(preds[~ood_mask], trues[~ood_mask])
+                print(f'[ExtrapEval] IN-domain  mse:{mse_in:.6f}, mae:{mae_in:.6f}')
+            else:
+                mse_in = mae_in = float('nan')
+                print('[ExtrapEval] no in-domain samples')
+            if n_out > 0:
+                mae_out, mse_out, _, _, _ = metric(preds[ood_mask], trues[ood_mask])
+                print(f'[ExtrapEval] OUT-domain mse:{mse_out:.6f}, mae:{mae_out:.6f}')
+            else:
+                mse_out = mae_out = float('nan')
+                print('[ExtrapEval] no out-of-domain samples')
+            extrap_info = f', mse_in:{mse_in}, mae_in:{mae_in}, mse_out:{mse_out}, mae_out:{mae_out}, n_in:{n_in}, n_out:{n_out}'
+
         f = open("result_long_term_forecast.txt", 'a')
         f.write(setting + "  \n")
-        f.write('mse:{}, mae:{}, dtw:{}'.format(mse, mae, dtw))
+        f.write('mse:{}, mae:{}, dtw:{}'.format(mse, mae, dtw) + extrap_info)
         f.write('\n')
         f.write('\n')
         f.close()

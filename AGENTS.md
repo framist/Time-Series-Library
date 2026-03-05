@@ -152,11 +152,11 @@ ETTm1 forecast/imputation + PSM anomaly + Heartbeat classification 均已包含 
 
 ---
 
-### Cycle 5: 掩码消融 + 外推实验
+### ✅ Cycle 5: 掩码消融 + 外推实验（已完成）
 
 **目标**：验证频域掩码增强和值域外推策略的效果（论文消融实验补充项）。
 
-**优先级**：🟡 中（消融完整性需要，但非核心结论）
+**优先级**：🟡 中（消融完整性需要，但非核心结论） → **实际结果：改善显著，优先级上调**
 
 **Steps**
 
@@ -184,6 +184,23 @@ ETTm1 forecast/imputation + PSM anomaly + Heartbeat classification 均已包含 
 - 掩码消融表格（mask_type × mask_prob × dlow_min → MSE/MAE）
 - 外推实验域内/域外分立 MSE 报告
 - 判定掩码/外推是否应纳入最终配置
+
+**2026-03-05 进展**
+- Step 1（掩码消融，18 组）✅ 已完成
+  - 脚本：`scripts/wvembs/forecast_etth1_cycle5_mask.sh`
+  - **phase_rotate 全面优于 zero/arcsine**，最佳：`phase_rotate, prob=0.1, dlow_min=4`（MSE=19.490，-14.7%）
+- Step 2（外推实验，4 组）✅ 已完成
+  - 脚本：`scripts/wvembs/forecast_etth1_cycle5_extrap.sh`
+  - **scale=5.0 达 MSE=15.866（-30.6%）**，机制为降低相位折叠，非 OOD 鲁棒性
+  - ETTh1 测试集 0 个域外样本，改善完全来自数值稳定性
+- Step 3（跨数据集验证，8 组）✅ 已完成
+  - 脚本：`scripts/wvembs/forecast_cycle5_crossval.sh`
+  - 配置：基线 / 最佳掩码 / 最佳外推 / 叠加 × ETTm1 + Weather
+  - **ETTm1**：叠加(mask+extrap)最佳（MSE -6.9%），extrap 单独有效（-3.3%），掩码单独无效（+5.0%）
+  - **Weather**：所有配置与基线差异 < 0.1%，掩码和外推均无显著效果
+  - **结论**：ETTh1 的大幅改善不可泛化，改善程度与数据集特性强相关
+- 可视化已完成：`results/cycle5_mask_heatmap.pdf`、`results/cycle5_extrap_bar.pdf`
+- 代码修改：`run.py` 新增 `--wv_extrap_eval`；`exp/exp_long_term_forecasting.py` 新增域内/域外分组统计
 
 ---
 
