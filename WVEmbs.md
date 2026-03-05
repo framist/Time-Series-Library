@@ -1,6 +1,6 @@
 # WVEmbs（Wide Value Embedding）在 TSLib 的最小跑通记录
 
-> 更新时间：2026-03-05
+> 更新时间：2026-03-06
 
 ## 背景速记（对齐论文表述）
 
@@ -150,8 +150,25 @@ python -u run.py \
     - Weather：所有配置与基线差异 < 0.1%，掩码和外推均无显著效果
     - 改善程度与数据集特性强相关，ETTh1 的大幅改善不可泛化
   - 可视化图表：`results/cycle5_mask_heatmap.pdf`、`results/cycle5_extrap_bar.pdf`
+- Cycle 6 关键发现（多 pred_len Table 1 + 退化调参 + Oracle 分析）：
+  - **60 组 Table 1 实验已完成**（5 数据集 × 4 pred_len × 3 配置），详见 `Report.md`
+  - **两大数据集族群**：
+    - **族群 A（ETTh1-like）**：ETTh1、ETTm1、Weather —— `wv_std_jss(0.25)` 全面稳健改善
+    - **族群 B（ETTh2-like）**：ETTh2、ETTm2 —— `wv_std_jss(0.25)` 短期有效但长期退化
+  - **Weather 上 WVEmbs 表现最佳**：`wv_std_jss` 改善 -40%(pl96) → -70%(pl720)
+  - **`wv_std_jss` 与 `wv_none_iss_extrap` 呈互补模式**
+  - **退化调参关键发现**（17 组）：
+    - 增大 jss_std 反而更差，退化是结构性的（JSS 跨通道共享采样假设在异质通道上失效）
+    - JSS+extrap 组合在 ETTh2 pl336 取得 -62.5% 改善
+    - ISS 在 ETTh2 pl336 修复了退化（-8.2%）
+    - ETTh2 pl720 所有配置均无法修复
+  - **Oracle 分析**：JSS 跨通道共享采样假设在异质通道上失效，增大 jss_std 不能解决结构性问题
+  - **论文最终推荐配置**：
+    - 主推荐：`embed=wv, scale_mode=standard, wv_sampling=jss, wv_jss_std=0.25`
+    - 增强：上述 + `wv_extrap_mode=scale, wv_extrap_scale=5.0`
+    - 备选（异质通道鲁棒）：`embed=wv, scale_mode=none, wv_sampling=iss, wv_extrap_mode=scale, wv_extrap_scale=5.0`
 - 其他早期发现（保留作为参考）：
-  - `scale_mode=none` 的“基线崩溃”并非只在 ECL 出现：ETTh2/ETTm2/Weather 的 `A: none+timeF` 也 NaN
+  - `scale_mode=none` 的"基线崩溃"：ETTh2/ETTm2/Weather 的 `none+timeF` 也 NaN
   - anomaly/classification 任务中 WVEmbs 均未带来收益
 
 ## 各任务最小脚本（需要数据集）
@@ -191,6 +208,7 @@ python -u run.py \
 - Cycle 5——Forecast（ETTm1/Weather 跨数据集验证）：`scripts/wvembs/forecast_cycle5_crossval.sh`
 - Cycle 5——可视化脚本：`scripts/wvembs/plot_cycle5.py`
 - Cycle 6——Forecast（多数据集 × 多 pred_len × 3 配置）：`scripts/wvembs/forecast_cycle6_table1.sh`
+- Cycle 6——Forecast（退化案例调参）：`scripts/wvembs/forecast_cycle6_tuning.sh`
 
 ## 备注（与“分布无关”目标的差距）
 

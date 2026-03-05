@@ -1,6 +1,6 @@
 ## 目标
 
-背景资料主要参考 [正在书写的论文](../latex) 正在书写的论文内容与 [大论文](siyuan://blocks/20250111201630-mbi59gv) 下属文档（核心理论与进展在 [WVEmbs：Dirac 测度在对偶谱上的取样](siyuan://blocks/20250712140205-01pdiso) 及其相关联的文档（内链文档）
+**背景资料**主要参考 [正在书写的论文](../latex) 正在书写的论文内容与 [大论文](siyuan://blocks/20250111201630-mbi59gv) 下属文档（核心理论与进展在 [WVEmbs：Dirac 测度在对偶谱上的取样](siyuan://blocks/20250712140205-01pdiso) 及其相关联的文档（内链文档）
 
 关键字说明：WVEmb (wvemb) === WVEmbs (wvembs)，但优先用 WVEmbs 来指代论文中的方法。
 
@@ -247,6 +247,16 @@ ETTm1 forecast/imputation + PSM anomaly + Heartbeat classification 均已包含 
 - 论文 LaTeX 表格可直接引用
 - 最终 git tag
 
+**2026-03-06 Cycle 6 进展**
+- Table 1 实验（60 组）✅ 已完成
+  - 5 数据集（ETTh1/ETTh2/ETTm1/ETTm2/Weather）× 4 pred_len（96/192/336/720）× 3 配置（timeF_std / wv_std_jss / wv_none_iss_extrap）
+  - 脚本：`scripts/wvembs/forecast_cycle6_table1.sh`
+- 退化调参（17 组）✅ 已完成
+  - ETTh2 pl336/720 + ETTm2 pl336 的 jss_std/iss/extrap 调参
+  - 脚本：`scripts/wvembs/forecast_cycle6_tuning.sh`
+- Oracle 分析 ✅ 已完成：JSS 跨通道共享采样假设在异质通道上失效
+- Report.md 全面更新（~623 行），包含完整 Table 1 + 调参 + Oracle 分析 + 跨数据集趋势
+
 ---
 
 ## 实验总量估算与时间规划（修订版）
@@ -257,9 +267,9 @@ ETTm1 forecast/imputation + PSM anomaly + Heartbeat classification 均已包含 
 | 1 | ✅ 已完成 | ~16 | ETTm1 补齐 + 统一模式全覆盖 |
 | 2 | ✅ 已完成 | ~30 | 多 backbone × embed × 任务 |
 | **3** | ✅ 已完成 | **~24** | **多数据集 Forecast 扩展** |
-| **4** | ⏳ 待执行 | **~33** | **JSS/ISS 系统消融** |
-| **5** | ⏳ 待执行 | **~24** | **掩码消融 + 外推** |
-| **6** | ⏳ 待执行 | **~70** | **最终调优 + 多 pred_len + 论文表格** |
+| **4** | ✅ 已完成 | **~33** | **JSS/ISS 系统消融** |
+| **5** | ✅ 已完成 | **~24** | **掩码消融 + 外推** |
+| **6** | ✅ 已完成 | **~77** | **最终调优 + 多 pred_len + 论文表格** |
 | | | **~127 剩余** | |
 
 - 单实验耗时估算：ETT ~5min，Weather ~8min（21ch），ECL(M) ~15min+
@@ -275,6 +285,18 @@ ETTm1 forecast/imputation + PSM anomaly + Heartbeat classification 均已包含 
 - **实验口径不变**：阶段 0 用 inverse=False（对齐上游），阶段 1 用 inverse=True（跨 scale_mode 可比）
 - **prior_scale 策略不变**：`max(|x_train|) × 2`
 
+## TODO：避免 RevIN 与 WVEmbs 的功能重叠，并增加与 RevIN 的对比实验
+
+
+本项目的实验体系中，scale_mode 控制的是数据提供层（DataLoader）的预处理缩放，与部分模型内部的 Normalize 是两个独立的归一化层。类如 TimeMixer 的 WVEmbs 实验在 stage0 中实际上叠加了两层归一化，这也可能是 TimeMixer 的 WVEmbs 收益较小（仅 -3%）的原因之一——RevIN 本身已提供了较强的分布自适应能力，WVEmbs 的增益空间被压缩
+
+可以考虑单独剥离出这些用了 RevIN 与只使用 WVEmb 与都不使用的基线进行对比
+
+## TODO 在回归/预测任务，使用我们提出的 HSPMF 方法
+
+方法详情参考背景资料
+
+## TODO 参考相关论文，给出优秀样例的可视化
 
 # 信息与经验
 
@@ -344,3 +366,26 @@ ETTm1 forecast/imputation + PSM anomaly + Heartbeat classification 均已包含 
 
 - Imputation / Anomaly / Classification 中 WVEmbs 均未带来收益（详见 Plan 的"Cycle 0-2 关键结论"）
 - 后续不再扩展这些任务的新数据集
+
+## Cycle 6 经验总结
+
+### 两大数据集族群模式
+- **族群 A（ETTh1-like）**：ETTh1、ETTm1、Weather——通道尺度较均匀，`wv_std_jss(0.25)` 全面稳健
+- **族群 B（ETTh2-like）**：ETTh2、ETTm2——通道尺度差异大（OT 近 216 vs MUFL 仅 34），JSS 共享采样假设失效
+
+### 调参经验
+- 增大 jss_std 不能修复 JSS 退化（结构性问题，非覆盖不足）
+- ISS 在异质通道数据上更鲁棒（逐通道独立采样避免跨通道干扰）
+- extrap_scale 本质是数值稳定性旋钮（降低相位折叠），非 OOD 鲁棒性
+- JSS+extrap 组合可产生超预期改善（ETTh2 pl336: -62.5%）
+- pl720 在异质通道数据上是结构性限制，任何调参均无法修复
+
+### Weather 的特殊行为
+- WVEmbs 改善率随 pred_len 增加：-40%(pl96) → -70%(pl720)
+- 与多数数据集相反（其他数据集改善率随 pred_len 递减）
+- 推测原因：21 维通道的多样性让 JSS 联合采样更充分地发挥作用
+
+### 论文最终推荐配置
+- **主推荐**：`embed=wv, scale_mode=standard, wv_sampling=jss, wv_jss_std=0.25`
+- **增强**：上述 + `wv_extrap_mode=scale, wv_extrap_scale=5.0`
+- **备选（异质通道鲁棒）**：`embed=wv, scale_mode=none, wv_sampling=iss, wv_extrap_mode=scale, wv_extrap_scale=5.0`
