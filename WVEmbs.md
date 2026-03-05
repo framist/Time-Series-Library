@@ -67,7 +67,7 @@ python scripts/wvembs/smoke_tasks.py --wv_mask_prob 1 --wv_mask_type arcsine
 
 ## 频域掩码增强（Masking）
 
-掩码只在训练阶段生效（推理时自动关闭），对应论文中 “Frequency Masking / Phase Rotate Masking”。
+掩码只在训练阶段生效（推理时自动关闭），对应论文中“Frequency Masking / Phase Rotate Masking”。
 
 已接入 `run.py` 参数（默认全部关闭）：
 - `--wv_mask_prob`：每个样本启用掩码的概率
@@ -124,23 +124,27 @@ python -u run.py \
 对照实验可将 `--embed wv` 改回 `--embed timeF`（传统基线），或改为 `--embed wv_timeF`（消融：值用 WVEmbs、时间仍用传统嵌入）。
 
 
-## 阶段 0/1 最终结论（2026-03-05）
+## 阶段 0-4 当前结论（2026-03-05）
 
 - 对齐上游口径：
   - 阶段 0（embed 对照）：不传 `--inverse`（指标在缩放空间，对齐 `scripts/*/ETT_script/*.sh` 默认）
   - 阶段 1（scale_mode 对照）：显式传 `--inverse`（把 `standard/prior/none` 的指标统一回原始物理量尺度）
 - 最终结果与表格：见 `Report.md`（该文件只保留最终结果，不包含弃用/最小预算尝试）
 - 当前已覆盖的真实数据集与任务：
-  - Forecast：ETTh1、ETTm1、Electricity(ECL)
+  - Forecast：ETTh1、ETTm1、ETTh2、ETTm2、Weather、Electricity(ECL)
   - Imputation：ETTh1、ETTm1
   - Anomaly：PSM
   - Classification：UEA/Heartbeat
-- 关键发现（供后续阶段 2/3 设计超参扫描时参考）：
-  - ETTh1 forecast 上，`wv_timeF` 在 `wv_sampling=jss` 下显著优于 `timeF`
-  - `wv` 统一模式与 `wv_sampling` 有强交互：在 ETTh1 forecast 上 `wv_sampling=iss` 能显著改善 `wv`，但 `jss` 可能导致退化（需要解释原因并形成统一默认）
-  - `scale_mode=none` 的“基线崩溃”并非在所有数据集上成立：ETTh1 不崩溃，但 Electricity(ECL) 上 `no_scale+timeF` 会出现 NaN
-  - prior 的“物理先验”仍待补齐：ETT 目前用训练段 `max(abs(x))×slack` 做初始化；ECL 上 `prior_scale` 对结果非常敏感（目前观察到 `target=OT` 时 `prior_scale≈5000` 明显优于 `1e5` 量级），需要更稳健且可解释的先验设定流程
-  - anomaly/classification 任务通常没有显式时间特征（`x_mark=None`），因此 `embed=wv` 更像是“值 WVEmbs + 额外零时间通道”的补齐项；脚本里已明确标注该解释。
+- Cycle 4 关键发现（JSS/ISS 系统消融）：
+  - **jss_std × scale_mode 存在反向交互**：`standard/none` 偏好小 jss_std（0.1–0.25），`prior` 偏好大 jss_std（1.0–2.0）
+  - 全局最优：`standard + jss + jss_std=0.25`（ETTh1 MSE=11.683）
+  - jss 在多数场景下优于 iss（特别是 `standard+jss` 明显优于 `standard+iss`）
+  - wv_base 影响较小：wv_base=100 最优，比默认 10000 改善 ~19%
+  - ETTh2 跨数据集验证确认同样的反向交互趋势
+  - 可视化图表：`results/cycle4_heatmap.pdf`、`results/cycle4_wvbase.pdf`、`results/cycle4_etth2.pdf`
+- 其他早期发现（保留作为参考）：
+  - `scale_mode=none` 的“基线崩溃”并非只在 ECL 出现：ETTh2/ETTm2/Weather 的 `A: none+timeF` 也 NaN
+  - anomaly/classification 任务中 WVEmbs 均未带来收益
 
 ## 各任务最小脚本（需要数据集）
 
@@ -155,6 +159,9 @@ python -u run.py \
 - Forecast（ETTm1 + 阶段0 embed 对照）：`scripts/wvembs/forecast_ettm1_stage0_embed_compare.sh`
 - Forecast（ETTm1 + 阶段0/1核心四组对照）：`scripts/wvembs/forecast_ettm1_stage01_core.sh`
 - Forecast（ETTh1 + ISS vs JSS）：`scripts/wvembs/forecast_etth1_jss.sh`
+- Forecast（ETTh2 + 阶段0/1核心对照）：`scripts/wvembs/forecast_etth2_stage01.sh`
+- Forecast（ETTm2 + 阶段0/1核心对照）：`scripts/wvembs/forecast_ettm2_stage01.sh`
+- Forecast（Weather + 阶段0/1核心对照 + TimeMixer 对照）：`scripts/wvembs/forecast_weather_stage01.sh`
 - Imputation（ETTh1）：`scripts/wvembs/imputation_etth1_quick.sh`
 - Imputation（ETTh1 + 阶段0 embed 对照）：`scripts/wvembs/imputation_etth1_stage0_embed_compare.sh`
 - Imputation（ETTh1 + 阶段0/1核心四组对照）：`scripts/wvembs/imputation_etth1_stage01_core.sh`
@@ -167,6 +174,10 @@ python -u run.py \
 - Classification（Heartbeat/UEA）：`scripts/wvembs/classification_heartbeat_quick.sh`
 - Classification（Heartbeat/UEA + scale_mode 对照）：`scripts/wvembs/classification_heartbeat_stage01_scale_compare.sh`
 - Classification（Heartbeat/UEA + 补齐 embed=wv）：`scripts/wvembs/classification_heartbeat_stage01_add_wv.sh`
+- Cycle 4——Forecast（ETTh1 + 三因素联合扫描）：`scripts/wvembs/forecast_etth1_cycle4_3factor.sh`
+- Cycle 4——Forecast（ETTh1 + wv_base 扫描）：`scripts/wvembs/forecast_etth1_cycle4_wvbase.sh`
+- Cycle 4——Forecast（ETTh2 + jss_std 跨数据集验证）：`scripts/wvembs/forecast_etth2_cycle4_jssstd.sh`
+- Cycle 4——可视化脚本：`scripts/wvembs/plot_cycle4.py`
 
 ## 备注（与“分布无关”目标的差距）
 

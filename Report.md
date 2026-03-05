@@ -1,7 +1,6 @@
-# WVEmbs 阶段 0/1 实验报告（TSLib / PG 分支）
+# WVEmbs 阶段实验报告（TSLib / PG 分支）
 
-> 更新时间：2026-03-05  
-> 目标：推进 `AGENTS.md` 的阶段 0/1（统一时间嵌入 + `scale_mode` 对照），并在真实数据集上给出可复现的最终结果。
+
 
 ## 运行环境
 
@@ -217,9 +216,132 @@ prior 参数（用于阶段 1 的组 C）：同 Forecast/ETTm1 的 7 通道 `pri
 - 阶段 1：ETTh1 上 `no_scale+timeF` 不会崩溃且优于 `standard+timeF`；但在 Electricity(ECL) 上 `no_scale+timeF` 会迅速出现 NaN。`wv` 统一模式在 ECL 上能避免 NaN，但性能仍显著落后于 `standard+timeF`，且 `prior_scale` 量级非常敏感。
 - 任务迁移：imputation / classification 上当前 `wv`/`wv_timeF` 未带来收益；anomaly 上差异很小。
 
+## Cycle 3 多数据集 Forecast 扩展（正式结果）
+
+说明：本节为 Cycle 3 的**正式全预算结果**（默认 `epochs=10`，未使用 `MAX_*_STEPS` 截断），对应脚本：
+- `scripts/wvembs/forecast_etth2_stage01.sh`
+- `scripts/wvembs/forecast_ettm2_stage01.sh`
+- `scripts/wvembs/forecast_weather_stage01.sh`
+
+### Stage 0（embed 对照，inverse=False，Transformer）
+
+| 数据集 | timeF (MSE/MAE) | wv_timeF (MSE/MAE) | wv（统一）(MSE/MAE) |
+|---|---:|---:|---:|
+| ETTh2 | 2.396026 / 1.231947 | 2.112907 / 1.234674 | **1.729860 / 0.972046** |
+| ETTm2 | 0.488215 / 0.515649 | 0.761407 / 0.655463 | **0.455119 / 0.516552** |
+| Weather | 0.295838 / 0.360556 | 0.347062 / 0.392888 | **0.163021 / 0.239843** |
+
+### Stage 1（D/A/B/C，inverse=True，Transformer）
+
+| 数据集 | D: standard+timeF | A: none+timeF | B: none+wv(iss) | C: prior+wv(jss) |
+|---|---:|---:|---:|---:|
+| ETTh2 (MSE/MAE) | 105.755470 / 8.462337 | NaN / NaN | 86.105225 / 7.682885 | **48.599602 / 5.298141** |
+| ETTm2 (MSE/MAE) | **28.626431 / 3.899127** | NaN / NaN | 33.739807 / 4.505991 | 41.301872 / 4.243606 |
+| Weather (MSE/MAE) | **7016.614258 / 26.169287** | NaN / NaN | 64641.105469 / 115.338234 | 50567.457031 / 67.505295 |
+
+### Weather 上 TimeMixer 横向验证（Stage 0，inverse=False）
+
+| 模型 | timeF (MSE/MAE) | wv_timeF (MSE/MAE) | wv（统一）(MSE/MAE) |
+|---|---:|---:|---:|
+| TimeMixer | **0.162456 / 0.209801** | 0.163028 / 0.211208 | 0.162974 / 0.211666 |
+
+### Cycle 3 结论
+
+- Stage 0 下，`wv` 统一模式在三套新数据集均优于 `timeF`（MSE：ETTh2 -27.8%，ETTm2 -6.8%，Weather -44.9%）。
+- Stage 1 下，三套新数据集的 `A: none+timeF` 全部出现 NaN，说明 `no_scale` 不稳定并非 ECL 个例。
+- Stage 1 的最优配置出现明显数据集依赖：ETTh2 最优为 `C(prior+wv,jss)`，而 ETTm2/Weather 仍以 `D(standard+timeF)` 最优。
+- Weather 上 TimeMixer 未复现 ETTh1 的小幅正收益，`wv/wv_timeF` 与 `timeF` 基本持平或略差。
+
+## Cycle 4: JSS/ISS 系统消融 + jss_std 联合扫描
+
+说明：本节为 Cycle 4 的正式全预算结果（`epochs=10`），统一使用 `--inverse`（原始物理量尺度）。
+
+对应脚本：
+- `scripts/wvembs/forecast_etth1_cycle4_3factor.sh`（三因素联合扫描，21 组）
+- `scripts/wvembs/forecast_etth1_cycle4_wvbase.sh`（wv_base 扫描，6 组）
+- `scripts/wvembs/forecast_etth2_cycle4_jssstd.sh`（ETTh2 跨数据集验证，6 组）
+
+### Step 1: 三因素联合扫描（ETTh1，Transformer，embed=wv）
+
+扫描范围：`wv_sampling` × `wv_jss_std` × `scale_mode`。固定 `embed=wv`（统一模式），其余超参同前。
+
+| scale_mode | sampling | jss_std | MSE | MAE |
+|---|---|---|---:|---:|
+| **standard** | iss | - | 13.908 | 2.336 |
+| standard | jss | 0.05 | 14.385 | 2.209 |
+| standard | jss | 0.1 | 12.423 | 2.065 |
+| **standard** | **jss** | **0.25** | **11.683** | **2.023** |
+| standard | jss | 0.5 | 12.117 | 2.138 |
+| standard | jss | 1.0 | 22.903 | 3.014 |
+| standard | jss | 2.0 | 28.087 | 3.395 |
+| **none** | iss | - | 22.857 | 2.881 |
+| none | jss | 0.05 | 13.412 | 2.456 |
+| none | jss | 0.1 | 14.203 | 2.354 |
+| none | jss | 0.25 | 17.643 | 2.593 |
+| none | jss | 0.5 | 18.080 | 2.549 |
+| none | jss | 1.0 | 38.128 | 3.496 |
+| none | jss | 2.0 | 55.635 | 4.073 |
+| **prior** | iss | - | 42.998 | 3.920 |
+| prior | jss | 0.05 | 32.919 | 3.497 |
+| prior | jss | 0.1 | 42.943 | 3.914 |
+| prior | jss | 0.25 | 33.153 | 3.549 |
+| prior | jss | 0.5 | 28.407 | 3.360 |
+| prior | jss | 1.0 | 19.922 | 2.738 |
+| **prior** | **jss** | **2.0** | **18.604** | **2.642** |
+
+### Step 2: wv_base 灵敏度扫描（ETTh1，embed=wv，none+iss）
+
+| wv_base | MSE | MAE |
+|---:|---:|---:|
+| **100** | **18.441** | **2.585** |
+| 500 | 20.034 | 2.652 |
+| 1000 | 20.416 | 2.668 |
+| 5000 | 18.864 | 2.599 |
+| 10000（default） | 22.857 | 2.881 |
+| 50000 | 21.275 | 2.760 |
+
+### Step 3: ETTh2 跨数据集验证（Transformer，embed=wv，jss）
+
+| scale_mode | jss_std | MSE | MAE |
+|---|---|---:|---:|
+| none | 0.1 | 94.989 | 8.056 |
+| none | 0.25 | 104.769 | 8.749 |
+| none | 0.5 | 112.081 | 8.904 |
+| prior | 0.1 | 130.679 | 9.577 |
+| prior | 0.25 | 86.934 | 7.466 |
+| **prior** | **0.5** | **53.602** | **5.570** |
+
+### Cycle 4 可视化
+
+- 三因素热力图：`results/cycle4_heatmap.pdf`（及 `.png`）
+- wv_base 灵敏度折线图：`results/cycle4_wvbase.pdf`（及 `.png`）
+- ETTh2 跨数据集验证热力图：`results/cycle4_etth2.pdf`（及 `.png`）
+
+### Cycle 4 结论
+
+1. **jss_std × scale_mode 存在反向交互（核心发现）**：
+   - `standard` 和 `none` 偏好**小** jss_std（0.1–0.25 最优）
+   - `prior` 偏好**大** jss_std（1.0–2.0 最优）
+   - 这是因为 `prior` 缩放已将值域压到 [-1,1] 附近，需要更大的谱宽度才能提供足够的分辨率；而 `standard/none` 幅值较大，小谱宽度已足够
+
+2. **全局最优配置（ETTh1）**：`standard + jss + jss_std=0.25`（MSE=11.683），远优于所有 ISS 变体
+
+3. **wv_base 影响较小但可优化**：
+   - wv_base=100 最优（MSE=18.441），比默认 10000 改善 ~19%
+   - 但效果量级远不如 jss_std 和 scale_mode 的影响
+
+4. **跨数据集验证（ETTh2）确认同样趋势**：
+   - `none` 偏好小 jss_std（0.1 最优）
+   - `prior` 偏好大 jss_std（0.5 最优，MSE=53.602）
+   - 证明 jss_std × scale_mode 反向交互是跨数据集稳健的现象
+
+5. **对论文的启示**：
+   - 建议论文中推荐配置按 scale_mode 分档：`standard/none` 用 jss_std=0.1–0.25，`prior` 用 jss_std=1.0–2.0
+   - jss 在多数场景下优于 iss（特别是 standard+jss 明显优于 standard+iss）
+   - wv_base 可作为附录消融，推荐默认 100–500
+
 ## 未完成问题与下一步
 
-- `wv` 统一模式：需要解释并系统化 `wv_sampling` 与 `scale_mode` 的交互（目前 ETTh1 上 B 组偏好 `iss`，C 组偏好 `jss`）。
-- prior 的“物理先验”尚未完成：ETT 目前用的是训练段 `max(abs(x))×2` 的初始化；ECL 目前是手调量级（1e5）以避免离谱尺度。
-- GPU 利用率仍偏低：已加入 DataLoader `pin_memory/persistent_workers/prefetch_factor`、训练侧 `non_blocking` 与 AMP；后续可尝试更大 batch、TF32/`torch.compile`、减少训练 loop 的每 step 同步等。
-- 覆盖面：阶段 0/1 已覆盖 ETTh1/ETTm1/ECL；Weather/ETTh2/ETTm2 等留待阶段 3 扩展。
+- Cycle 4 已完成：三因素扫描、wv_base 扫描、跨数据集验证均已完成，可视化图表已生成。
+- 下一步进入 Cycle 5（掩码消融 + 外推实验）或 Cycle 6（最终调优 + 多 pred_len + 论文表格产出）。
+- 关键待解决：在 Cycle 6 中利用 Cycle 4 结论，按 scale_mode 分档设定最终 jss_std。

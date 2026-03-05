@@ -27,7 +27,7 @@
 考虑只做总指挥，低难度或检索类的工作可以指派子 agent 完成
 
 
-# Plan: WVEmbs 全流程实验（修订版 v2，2026-03-05）
+# Plan: WVEmbs 全流程实验
 
 注意：计划的细节不一定正确，实现前需要加以判断，可以调整。暂时无法完成可以跳过，但需要记录原因和后续计划。
 
@@ -114,48 +114,41 @@ ETTm1 forecast/imputation + PSM anomaly + Heartbeat classification 均已包含 
 - 跨数据集趋势分析表：WVEmbs 改善率 (%) 的汇总
 - Weather 上 TimeMixer 结果与 ETTh1 趋势对比
 
+**2026-03-05 进展（本轮）**
+- 已新增脚本：
+  - `scripts/wvembs/forecast_etth2_stage01.sh`
+  - `scripts/wvembs/forecast_ettm2_stage01.sh`
+  - `scripts/wvembs/forecast_weather_stage01.sh`
+- 三个脚本均已做 `bash -n` 语法检查。
+- 已完成正式全预算实验（`epochs=10`，共 24 组）：
+  - ETTh2 / ETTm2 / Weather（Transformer：stage0 三组 + stage1 四组）
+  - Weather（TimeMixer：stage0 三组）
+- 正式结果摘要：
+  - stage0：`wv` 统一模式在 ETTh2 / ETTm2 / Weather 均优于 `timeF`（MSE 改善约 -27.8% / -6.8% / -44.9%）
+  - stage1：三套新数据集的 `A: none+timeF` 均出现 NaN
+  - stage1 最优组：ETTh2 为 `C(prior+wv,jss)`，ETTm2/Weather 为 `D(standard+timeF)`
+  - Weather-TimeMixer：`timeF` 与 `wv/wv_timeF` 基本持平，未复现 ETTh1 的小幅增益
+- 已同步更新 `Report.md` / `WVEmbs.md` 记录正式结果。
+
 ---
 
-### Cycle 4: JSS / ISS 系统消融 + jss_std 联合扫描
+### ✅ Cycle 4: JSS / ISS 系统消融 + jss_std 联合扫描（已完成）
 
-**目标**：系统化理解 `wv_sampling × wv_jss_std × scale_mode` 三因素交互，为论文中"采样策略"一节提供充分数据支撑。
+**目标**：系统化理解 `wv_sampling × wv_jss_std × scale_mode` 三因素交互，为论文中“采样策略”一节提供充分数据支撑。
 
-**优先级**：🔴 高（核心理论对应，论文消融实验必须项）
+**已完成内容**：
+- 21 组三因素联合扫描（ETTh1，Transformer）
+- 6 组 wv_base 扫描（ETTh1，none+iss）
+- 6 组 ETTh2 跨数据集验证（jss_std × scale_mode）
+- 3 张可视化图表（热力图、折线图）
+- Report.md / WVEmbs.md 已同步更新
 
-**背景**：Cycle 2 + 阶段性补充已发现 `jss_std` 极敏感、且与 `scale_mode` 强交互，但缺乏系统扫描。
-
-**Steps**
-
-1. **三因素联合扫描**（ETTh1 forecast，Transformer）：
-   - 固定 `embed=wv`（统一模式），扫描：
-     - `wv_sampling` ∈ {iss, jss}
-     - `wv_jss_std` ∈ {0.05, 0.1, 0.25, 0.5, 1.0, 2.0}（仅 jss 生效）
-     - `scale_mode` ∈ {standard, none, prior}
-   - 口径：`inverse=True`（统一到原始尺度，跨 scale_mode 可比）
-   - 共 3×(1 + 6) = **21 组**
-   - 扩展已有 `forecast_etth1_jss.sh`
-
-2. **wv_base 扫描**（ETTh1 forecast，Transformer，`embed=wv, scale_mode=none, wv_sampling=iss`）：
-   - `wv_base` ∈ {100, 500, 1000, 5000, 10000, 50000}
-   - 共 **6 组**（在最优 iss 配置下验证频率基底宽度的影响）
-
-3. **在 Cycle 3 最佳新数据集上重复关键扫描**：
-   - 选 Cycle 3 中 WVEmbs 改善最大的数据集（预计 ETTm2 或 Weather）
-   - 只扫 `jss_std` ∈ {0.1, 0.25, 0.5} × `scale_mode` ∈ {none, prior}（**6 组**）
-   - 验证最优 `jss_std` 是否跨数据集稳定
-
-4. **可视化与解释**：
-   - 绘制 `jss_std × scale_mode` 热力图（MSE 值）
-   - 绘制 `wv_base` 灵敏度折线图
-   - 对 B/C 组偏好 iss/jss 的现象给出定性解释并写入 Report
-
-**实验组数**：21 + 6 + 6 ≈ **33 组**
-
-**Verification**
-- 热力图/折线图产出（matplotlib PDF）
-- 最优 `jss_std` 区间确认（预期 0.1~0.25）
-- `wv_base` 最优区间确认
-- 交互现象的解释文字写入 Report.md
+**核心发现**：
+- jss_std × scale_mode 反向交互：`standard/none` 偏好小σ（0.1–0.25），`prior` 偏好大σ（1.0–2.0）
+- 全局最优：`standard + jss + jss_std=0.25`（ETTh1 MSE=11.683）
+- jss 在多数场景下优于 iss
+- wv_base=100 最优，但影响量级远小于 jss_std/scale_mode
+- ETTh2 确认同样反向交互趋势
 
 ---
 
@@ -246,15 +239,15 @@ ETTm1 forecast/imputation + PSM anomaly + Heartbeat classification 均已包含 
 | 0 | ✅ 已完成 | 2 | 数据准备 + GPU 探测 |
 | 1 | ✅ 已完成 | ~16 | ETTm1 补齐 + 统一模式全覆盖 |
 | 2 | ✅ 已完成 | ~30 | 多 backbone × embed × 任务 |
-| **3** | ⏳ 待执行 | **~24** | **多数据集 Forecast 扩展** |
+| **3** | ✅ 已完成 | **~24** | **多数据集 Forecast 扩展** |
 | **4** | ⏳ 待执行 | **~33** | **JSS/ISS 系统消融** |
 | **5** | ⏳ 待执行 | **~24** | **掩码消融 + 外推** |
 | **6** | ⏳ 待执行 | **~70** | **最终调优 + 多 pred_len + 论文表格** |
-| | | **~151 剩余** | |
+| | | **~127 剩余** | |
 
 - 单实验耗时估算：ETT ~5min，Weather ~8min（21ch），ECL(M) ~15min+
-- 剩余 GPU 时间：约 **15-25 小时**（ETT 为主，不含 ECL(M)）
-- 可并行策略：Cycle 3 的 3 个数据集互不依赖，可同时跑
+- 剩余 GPU 时间：约 **13-22 小时**（ETT 为主，不含 ECL(M)）
+- 可并行策略：Cycle 4 的 ETTh1 扫描可与图表整理并行，等待结果期间同步维护 Report/WVEmbs 解释文本
 
 ## Decisions（修订版）
 
