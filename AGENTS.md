@@ -294,9 +294,49 @@ ETTm1 forecast/imputation + PSM anomaly + Heartbeat classification 均已包含 
 
 ## TODO 在回归/预测任务，使用我们提出的 HSPMF 方法
 
-方法详情参考背景资料
+保留目前不使用 HSPMF 方法的结果，用作为一个新的实验系列。方法详情参考背景资料。
 
-## TODO 参考相关论文，给出优秀样例的可视化
+## 论文可视化样例（已完成）
+
+可视化脚本位置：`scripts/wvembs/visualize_paper_samples.py`
+
+生成的可视化类型：
+1. **单数据集预测样例图**（`{dataset}_pl{pred_len}_sample.png`）
+   - 展示历史输入、真实值、timeF基线预测、WVEmbs预测
+   - 包含MSE/MAE指标对比和改善百分比
+   - 预测区域用黄色背景高亮
+
+2. **多预测长度对比图**（`{dataset}_multi_predlen.png`）
+   - 2×2子图布局展示4个预测长度（96/192/336/720）
+   - 每个子图显示对应长度的预测效果
+
+3. **架构概念图**（`wvembs_architecture.png`）
+   - WVEmbs方法的整体架构流程
+   - 与timeF基线的对比
+
+4. **性能汇总对比图**（`performance_summary.png`）
+   - 5个数据集 × 4个预测长度的MSE对比柱状图
+
+使用方式：
+```bash
+# 生成特定数据集的预测样例
+python scripts/wvembs/visualize_paper_samples.py \
+    --dataset ETTh1 \
+    --pred_len 96 \
+    --outdir results/paper_visualizations/
+
+# 生成的文件保存在 results/paper_visualizations/
+```
+
+可视化质量参考了以下时间序列论文的常见风格：
+- 清晰的图例和标签
+- 统一的配色方案（timeF蓝色、WVEmbs红色/粉色、真实值黑色）
+- 指标文本框直观展示性能对比
+- 300 DPI高分辨率输出
+
+# 信息与经验
+
+# 信息与经验
 
 # 信息与经验
 
