@@ -610,7 +610,79 @@ prior 参数（用于阶段 1 的组 C）：同 Forecast/ETTm1 的 7 通道 `pri
 - 不适用于通道尺度跨度极大的多通道数据集（Weather）
 - 掩码增强（phase_rotate）跨数据集效果不稳定，不纳入最终推荐
 
-**论文呈现策略**（基于 Oracle 建议）：
+- 主表报告"主推荐配置"的结果，辅以"增强配置"修复退化点
+- 消融/附录中展示两种配置的互补性分析
+- 对不可修复的退化（ETTh2 pl720）如实报告并分析根因
+
+## 论文可视化样例
+
+为支持论文撰写，已生成一系列高质量可视化图表，参考顶级时间序列论文（TimesNet/iTransformer/TimeMixer）的风格，确保专业性和可读性。
+
+### 可视化文件清单
+
+所有可视化保存在 `results/paper_visualizations/` 目录：
+
+| 文件名 | 类型 | 描述 |
+|--------|------|------|
+| `ETTh1_pl96_sample.png` | 预测样例 | ETTh1 单步预测对比，WVEmbs vs timeF |
+| `ETTh1_multi_predlen.png` | 多长度对比 | ETTh1 的 96/192/336/720 四档预测长度对比 |
+| `ETTh2_pl96_sample.png` | 预测样例 | ETTh2 单步预测对比 |
+| `ETTh2_multi_predlen.png` | 多长度对比 | ETTh2 多长度预测效果 |
+| `ETTm1_pl96_sample.png` | 预测样例 | ETTm1 单步预测对比 |
+| `ETTm1_multi_predlen.png` | 多长度对比 | ETTm1 多长度预测效果 |
+| `Weather_pl96_sample.png` | 预测样例 | Weather 单步预测对比，展示 -63% 改善 |
+| `Weather_multi_predlen.png` | 多长度对比 | Weather 多长度预测效果 |
+| `wvembs_architecture.png` | 架构图 | WVEmbs 方法概念流程图 |
+| `performance_summary.png` | 性能汇总 | 5数据集 × 4长度 MSE对比柱状图 |
+
+### 可视化特点
+
+**配色方案**（统一风格）：
+- timeF 基线：蓝色 `#2196F3`
+- WVEmbs (Ours)：粉红/洋红 `#E91E63`
+- Ground Truth：黑色 `#000000`
+- Historical Input：灰色 `#9E9E9E`
+- 预测区域背景：淡黄色高亮
+
+**信息展示**：
+- **定性**：预测曲线与真实值的视觉对比
+- **定量**：文本框直接展示 MSE/MAE/改善百分比
+- **分辨率**：300 DPI，适合论文印刷
+
+### 关键可视化解读
+
+**图1：ETTh1 预测样例** (`ETTh1_pl96_sample.png`)
+- 展示历史输入（灰色，0-96时间步）和预测区间（黄色高亮，96-192时间步）
+- WVEmbs（粉红）比 timeF（蓝色虚线）更接近真实值（黑色）
+- 指标框显示：MSE 从 1.0086 → 0.3986，改善 **+60.5%**
+
+**图2：WVEmbs 架构** (`wvembs_architecture.png`)
+- 展示输入 → WVEmbs嵌入 → Transformer → 输出的完整流程
+- 突出 WV-Lift: x → Z = [cos(ωx), sin(ωx)] 的核心操作
+- 与 timeF 基线（TokenEmbedding + TimeFeatureEmbedding）形成对比
+
+**图3：性能汇总** (`performance_summary.png`)
+- 5个子图分别展示 ETTh1/ETTh2/ETTm1/ETTm2/Weather 的性能对比
+- X轴：预测长度（96/192/336/720）
+- Y轴：MSE
+- 蓝色柱：timeF，红色柱：WVEmbs
+- 直观展示 WVEmbs 在多数场景下的优势
+
+### 使用方式
+
+```bash
+# 生成特定数据集的预测样例
+python scripts/wvembs/visualize_paper_samples.py \
+    --dataset ETTh1 \
+    --pred_len 96 \
+    --outdir results/paper_visualizations/
+
+# 支持的数据集：ETTh1, ETTh2, ETTm1, ETTm2, Weather
+```
+
+详细说明见 `results/paper_visualizations/README.md`。
+
+## 未完成问题与下一步
 - 主表报告"主推荐配置"的结果，辅以"增强配置"修复退化点
 - 消融/附录中展示两种配置的互补性分析
 - 对不可修复的退化（ETTh2 pl720）如实报告并分析根因
