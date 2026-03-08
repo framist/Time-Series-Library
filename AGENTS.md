@@ -66,6 +66,7 @@ plt.rcParams.update(font_config)
   - `scripts/wvembs/run_final_suite.sh`
   - `scripts/wvembs/forecast_cycle6_table1.sh`
   - `scripts/wvembs/forecast_cycle6_tuning.sh`
+  - `scripts/wvembs/forecast_groupb_priority_scan.sh`
   - `scripts/wvembs/forecast_timemixer_revin_ablation.sh`
   - `scripts/wvembs/forecast_etth1_hspmf.sh`
   - `scripts/wvembs/forecast_hspmf_e2e.py`

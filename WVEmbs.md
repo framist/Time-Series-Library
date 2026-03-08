@@ -106,6 +106,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 - 逐预测步误差曲线导出：`scripts/wvembs/export_horizon_error_curves.py`
 - Forecast 主表生成：`scripts/wvembs/forecast_cycle6_table1.sh`
 - Forecast 退化点修复扫描：`scripts/wvembs/forecast_cycle6_tuning.sh`
+- 族群 B 高优先修复扫描：`scripts/wvembs/forecast_groupb_priority_scan.sh`
 - 当前完整实验套件入口：`scripts/wvembs/run_final_suite.sh`
 
 ### 关键消融
