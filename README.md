@@ -233,6 +233,12 @@ bash scripts/wvembs/no_preprocess_fair_suite.sh
 ```
 
 The script fixes the backbone / training protocol / data split and only swaps the input layer among `timeF`, `linear`, and `wv`.
+To rerun only the WVEmbs branch with a looser extrapolation setting, use:
+
+```bash
+FAIR_EMBEDS="wv" WV_EXTRAP_MODE=scale WV_EXTRAP_SCALE=5.0 \
+  bash scripts/wvembs/no_preprocess_fair_suite.sh
+```
 
 ### WVEmbs Experiment Mapping
 
@@ -250,6 +256,8 @@ For the WVEmbs experiments in this branch, the delivery-facing descriptions and 
   `scripts/wvembs/forecast_timemixer_revin_ablation.sh`
 - HSPMF verification:
   `scripts/wvembs/forecast_etth1_hspmf.sh`
+  For the standalone End2End-NLL route without `run.py`, use `scripts/wvembs/forecast_hspmf_e2e.py`.
+  This script now covers the plain WVEmbs baseline, the HSPMF point-MSE route, and the End2End-NLL route. HSPMF test runs additionally write `hspmf_dist_metrics.json` with `nll / crps / beta`.
 
 The code-to-method mapping is mainly:
 

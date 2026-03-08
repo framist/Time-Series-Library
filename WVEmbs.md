@@ -29,7 +29,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 | `--wv_base` | 对数频率基底 |
 | `--wv_mask_prob` / `--wv_mask_type` / `--wv_mask_dlow_min` | 训练期掩码增强 |
 | `--wv_extrap_mode direct|scale` / `--wv_extrap_scale` | 值域外推与相位缩放 |
-| `--use_hspmf` 及 `--hspmf_*` | HSPMF 实验开关 |
+| `--use_hspmf` / `--hspmf_loss mse|nll` / `--hspmf_learn_beta` 及其余 `--hspmf_*` | HSPMF 实验开关、训练目标与 beta 学习方式 |
 
 ### 关键代码位置
 
@@ -77,7 +77,8 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 - 掩码增强中 `phase_rotate` 在 ETTh1 上最佳，但跨数据集不稳，不进入默认配置。
 - `wv_extrap_scale` 本质是数值稳定性旋钮，不应表述为“自动获得 OOD 鲁棒性”。
 - TimeMixer 上 RevIN-only 最优，说明 WVEmbs 与强归一化机制有功能重叠。
-- HSPMF 当前输出层增强版显著差于纯 WVEmbs，只保留为实验分支。
+- HSPMF 当前实验分支已支持“正频率谱头 + 共轭对称重建 + End2End-NLL”；测试阶段会额外写出 `results/.../hspmf_dist_metrics.json`，记录 `nll / crps / beta`。
+- 现有已完成的 ETTh1 退化结果主要对应旧版点预测头；新版 End2End-NLL 仍在完整预算重跑中。
 
 ## 兼容性矩阵
 
@@ -100,6 +101,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 ### 主实验
 
 - 无预处理公平对照：`scripts/wvembs/no_preprocess_fair_suite.sh`
+  - 仅补跑 WVEmbs 宽松参数时，可用：`FAIR_EMBEDS="wv" WV_EXTRAP_MODE=scale WV_EXTRAP_SCALE=5.0 bash scripts/wvembs/no_preprocess_fair_suite.sh`
 - 无预处理结果汇总：`scripts/wvembs/summarize_no_preprocess_results.py`
 - Forecast 主表生成：`scripts/wvembs/forecast_cycle6_table1.sh`
 - Forecast 退化点修复扫描：`scripts/wvembs/forecast_cycle6_tuning.sh`
@@ -112,7 +114,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 - 掩码与外推消融：`scripts/wvembs/forecast_etth1_cycle5_mask.sh`、`scripts/wvembs/forecast_etth1_cycle5_extrap.sh`
 - 交叉验证：`scripts/wvembs/forecast_cycle5_crossval.sh`
 - RevIN 功能重叠消融：`scripts/wvembs/forecast_timemixer_revin_ablation.sh`
-- HSPMF 验证：`scripts/wvembs/forecast_etth1_hspmf.sh`
+- HSPMF 验证：`scripts/wvembs/forecast_etth1_hspmf.sh`、`scripts/wvembs/forecast_hspmf_e2e.py`
 
 ### 可视化
 

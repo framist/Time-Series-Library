@@ -40,6 +40,7 @@ plt.rcParams.update(font_config)
     - 为了体现无预处理场景的实际意义，WVEmbs 要求的预处理（对数据集线性变换）可以改为设置宽松的 WVEmbs 内部参数
     - 当前实现进度：已补 `embed=linear` / `linear_timeF` 这类线性输入层基线，并新增 `scripts/wvembs/no_preprocess_fair_suite.sh` 统一入口；已完成小预算链路验证，下一步是完整预算重跑并回填 `Report.md`
   - HSPMF 检查现有实现是否正确合理，特别目前缺少了 End2End-NLL 的训练方法，可以参考 ../HSPMF 中的实验方法和一些已有结果；注意需要用分布拟合相关指标来体现 HSPMF 的优势点；另外也尝试验证“纯 WVEmbs backbone + 推理期 HSPMF 解码”路线。
+    - 当前实现进度：已把“正频率谱头 + 共轭对称重建 + `hspmf_loss=nll` + test 侧 `nll/crps` 指标落盘”接入 Forecast 主线；下一步是 ETTh1 完整预算比较 `point-MSE / End2End-NLL / 推理期解码`
   - 类如 cycle 这些实验名在交付论文的图表，不要有这些内部名、脚本与代码名，而是用自然语言描述。族群 A、族群 B 也需要加以说明
 - 中优先：
   - 围绕 ETTh2 / ETTm2 的长预测退化继续做“修复型”扫描，优先级顺序是：`wv_sampling` 切换、`wv_extrap_scale`、`jss_std`、必要时再看 `prior_scale`。目标不是再找一个全局默认，而是给出“族群 B 为何需要备选配置”的更强证据。
@@ -67,6 +68,7 @@ plt.rcParams.update(font_config)
   - `scripts/wvembs/forecast_cycle6_tuning.sh`
   - `scripts/wvembs/forecast_timemixer_revin_ablation.sh`
   - `scripts/wvembs/forecast_etth1_hspmf.sh`
+  - `scripts/wvembs/forecast_hspmf_e2e.py`
 - 可视化：
   - `scripts/wvembs/visualize_paper_samples.py`
   - `scripts/wvembs/visualize_predictions.py`
@@ -127,7 +129,7 @@ plt.rcParams.update(font_config)
 ### RevIN 与 HSPMF
 
 - RevIN 消融结论：TimeMixer 上 `RevIN-only` 最优，`RevIN + WVEmbs` 不优于它。
-- HSPMF 当前版本仅完成“可运行 + 可评估”；在 ETTh1 上基线从 `13.91 / 2.34` 退化到 `27.29 / 3.20`，不进入默认实验套件。
+- HSPMF 旧版点预测头在 ETTh1 上曾把基线从 `13.91 / 2.34` 退化到 `27.29 / 3.20`，因此未进入默认实验套件；新版 End2End-NLL 与分布指标已接线，但完整预算重跑尚未完成。
 
 ### 维护约定
 
