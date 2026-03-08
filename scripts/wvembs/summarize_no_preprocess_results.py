@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -166,6 +167,8 @@ def markdown_table(headers: List[str], rows: List[Dict[str, str]]) -> str:
 
 
 def _format_delta(current: float, baseline: float, lower_is_better: bool = True) -> str:
+    if not math.isfinite(current) or not math.isfinite(baseline):
+        return "NaN/Inf"
     if baseline == 0:
         return ""
     ratio = (current - baseline) / baseline * 100.0
