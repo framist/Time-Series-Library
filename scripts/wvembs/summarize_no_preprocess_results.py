@@ -25,6 +25,7 @@ import numpy as np
 
 
 ROOT = Path(__file__).resolve().parents[2]
+VARIANT_ORDER = {"raw_timeF": 0, "timeF": 0, "linear": 1, "wv": 2}
 
 
 def _parse_forecast_setting(name: str) -> Dict[str, str]:
@@ -79,6 +80,10 @@ def _variant_label(variant: str) -> str:
         "linear": "线性统一输入层",
         "wv": "WVEmbs 统一输入层",
     }.get(variant, variant)
+
+
+def _variant_rank(variant: str) -> int:
+    return VARIANT_ORDER.get(variant, 99)
 
 
 def collect_forecast(des: str) -> List[Dict[str, str]]:
@@ -212,7 +217,7 @@ def main() -> None:
 
     forecast_rows = collect_forecast(args.des)
     if forecast_rows:
-        forecast_rows.sort(key=lambda x: (x["dataset"], int(x["pred_len"]), x["variant"]))
+        forecast_rows.sort(key=lambda x: (x["dataset"], int(x["pred_len"]), _variant_rank(x["variant"])))
         attach_delta(forecast_rows, ["dataset", "pred_len"], "mse", "vs_raw_timeF")
         sections.append(
             "## Forecast\n"
@@ -224,7 +229,7 @@ def main() -> None:
 
     imputation_rows = collect_imputation(args.des)
     if imputation_rows:
-        imputation_rows.sort(key=lambda x: (x["dataset"], x["variant"]))
+        imputation_rows.sort(key=lambda x: (x["dataset"], _variant_rank(x["variant"])))
         attach_delta(imputation_rows, ["dataset"], "mse", "vs_raw_timeF")
         sections.append(
             "## Imputation\n"
@@ -233,7 +238,7 @@ def main() -> None:
 
     anomaly_rows = collect_anomaly(args.des)
     if anomaly_rows:
-        anomaly_rows.sort(key=lambda x: (x["dataset"], x["variant"]))
+        anomaly_rows.sort(key=lambda x: (x["dataset"], _variant_rank(x["variant"])))
         attach_delta(anomaly_rows, ["dataset"], "f1", "vs_raw_timeF", lower_is_better=False)
         sections.append(
             "## Anomaly\n"
@@ -242,7 +247,7 @@ def main() -> None:
 
     classification_rows = collect_classification(args.des)
     if classification_rows:
-        classification_rows.sort(key=lambda x: (x["dataset"], x["variant"]))
+        classification_rows.sort(key=lambda x: (x["dataset"], _variant_rank(x["variant"])))
         attach_delta(classification_rows, ["dataset"], "accuracy", "vs_raw_timeF", lower_is_better=False)
         sections.append(
             "## Classification\n"
