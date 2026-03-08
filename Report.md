@@ -177,11 +177,12 @@
 
 - 无预处理公平对照：`scripts/wvembs/no_preprocess_fair_suite.sh`
 - 无预处理结果汇总：`scripts/wvembs/summarize_no_preprocess_results.py`
+- 逐预测步误差曲线导出：`scripts/wvembs/export_horizon_error_curves.py`
 - 主实验脚本：`scripts/wvembs/forecast_cycle6_table1.sh`
 - 退化调参：`scripts/wvembs/forecast_cycle6_tuning.sh`
 - RevIN 消融：`scripts/wvembs/forecast_timemixer_revin_ablation.sh`
 - HSPMF：`scripts/wvembs/forecast_etth1_hspmf.sh`
-- 可视化：`scripts/wvembs/visualize_paper_samples.py` 与 `results/paper_visualizations/`
+- 可视化：`scripts/wvembs/visualize_paper_samples.py`、`scripts/wvembs/export_horizon_error_curves.py` 与 `results/paper_visualizations/`
 
 当前待完成事项：
 
