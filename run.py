@@ -111,6 +111,27 @@ if __name__ == '__main__':
     parser.add_argument('--wv_extrap_eval', action='store_true', default=False,
                         help='测试阶段启用域内/域外分组统计（用于外推性能评估）')
 
+    # HSPMF (Hierarchical Soft Posterior Matched Filtering)
+    parser.add_argument('--use_hspmf', action='store_true', default=False,
+                        help='启用 HSPMF 解码器（将 WVEmb 频域特征解码为值域后验）')
+    parser.add_argument('--hspmf_n_fourier', type=int, default=16,
+                        help='HSPMF 傅里叶阶数 N（频点总数 K=2N+1）')
+    parser.add_argument('--hspmf_period', type=float, default=1.0,
+                        help='HSPMF 频率周期参数（影响频率网格间距）')
+    parser.add_argument('--hspmf_x_range', type=float, nargs=2, default=None,
+                        help='HSPMF 解码值域范围 [x_lo, x_hi]，None 则使用默认值 [-6,6]')
+    parser.add_argument('--hspmf_grid_size', type=int, default=64,
+                        help='HSPMF 解码网格大小（越大越精确但计算量越大）')
+    parser.add_argument('--hspmf_beta', type=float, default=1.0,
+                        help='HSPMF 锐化系数（后验锐度）')
+    parser.add_argument('--hspmf_tau', type=float, default=1.0,
+                        help='HSPMF 温度系数（softmax 温度）')
+    parser.add_argument('--hspmf_score_mode', type=str, default='abs2', choices=['real', 'abs2'],
+                        help='HSPMF 分数模式：real=实部，abs2=模平方（默认abs2对齐论文）')
+    parser.add_argument('--hspmf_hier_levels', type=int, nargs='+', default=None,
+                        help='HSPMF 分层级数，如 4 16。末项必须等于 n_fourier，None 则自动选择')
+
+    # optimization
     # optimization
     parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
     parser.add_argument('--itr', type=int, default=1, help='experiments times')
