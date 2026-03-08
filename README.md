@@ -249,7 +249,7 @@ For the WVEmbs experiments in this branch, the delivery-facing descriptions and 
   The three reported settings are "standardized time-feature baseline", "standardized WVEmbs main setting", and "no-preprocess WVEmbs fallback".
 - No-preprocess fair control:
   `scripts/wvembs/no_preprocess_fair_suite.sh`
-  This path keeps the same backbone / split / protocol and only swaps the input layer among `timeF`, `linear`, and `wv`. Results can be summarized with `scripts/wvembs/summarize_no_preprocess_results.py`, and the step-wise horizon error curves can be exported with `scripts/wvembs/export_horizon_error_curves.py`.
+  This path keeps the same backbone / split / protocol and only swaps the input layer among `timeF`, `linear`, and `wv`. Results can be summarized with `scripts/wvembs/summarize_no_preprocess_results.py` (including both `vs_raw_timeF` and `vs_linear`), and the step-wise horizon error curves can be exported with `scripts/wvembs/export_horizon_error_curves.py`.
 - Long-horizon repair scan for ETTh2 / ETTm2:
   `scripts/wvembs/forecast_cycle6_tuning.sh`
   When the remaining budget is tight and only the highest-value Group B follow-ups should be run first, use `scripts/wvembs/forecast_groupb_priority_scan.sh`.

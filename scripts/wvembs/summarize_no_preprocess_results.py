@@ -19,7 +19,7 @@ import math
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Sequence
 
 import numpy as np
 
@@ -188,14 +188,22 @@ def attach_delta(
     metric_key: str,
     out_key: str,
     lower_is_better: bool = True,
+    baseline_variants: Sequence[str] | None = None,
 ) -> None:
     grouped: Dict[tuple, Dict[str, Dict[str, str]]] = defaultdict(dict)
     for row in rows:
         key = tuple(row[k] for k in group_keys)
         grouped[key][row["variant"]] = row
 
+    if baseline_variants is None:
+        baseline_variants = ("raw_timeF", "timeF")
+
     for variants in grouped.values():
-        baseline = variants.get("raw_timeF") or variants.get("timeF")
+        baseline = None
+        for variant_name in baseline_variants:
+            baseline = variants.get(variant_name)
+            if baseline is not None:
+                break
         if baseline is None:
             continue
         baseline_value = float(baseline[metric_key])
@@ -219,10 +227,11 @@ def main() -> None:
     if forecast_rows:
         forecast_rows.sort(key=lambda x: (x["dataset"], int(x["pred_len"]), _variant_rank(x["variant"])))
         attach_delta(forecast_rows, ["dataset", "pred_len"], "mse", "vs_raw_timeF")
+        attach_delta(forecast_rows, ["dataset", "pred_len"], "mse", "vs_linear", baseline_variants=("linear",))
         sections.append(
             "## Forecast\n"
             + markdown_table(
-                ["dataset", "pred_len", "variant_label", "mse", "mae", "vs_raw_timeF"],
+                ["dataset", "pred_len", "variant_label", "mse", "mae", "vs_raw_timeF", "vs_linear"],
                 forecast_rows,
             )
         )
@@ -231,27 +240,47 @@ def main() -> None:
     if imputation_rows:
         imputation_rows.sort(key=lambda x: (x["dataset"], _variant_rank(x["variant"])))
         attach_delta(imputation_rows, ["dataset"], "mse", "vs_raw_timeF")
+        attach_delta(imputation_rows, ["dataset"], "mse", "vs_linear", baseline_variants=("linear",))
         sections.append(
             "## Imputation\n"
-            + markdown_table(["dataset", "variant_label", "mse", "mae", "vs_raw_timeF"], imputation_rows)
+            + markdown_table(["dataset", "variant_label", "mse", "mae", "vs_raw_timeF", "vs_linear"], imputation_rows)
         )
 
     anomaly_rows = collect_anomaly(args.des)
     if anomaly_rows:
         anomaly_rows.sort(key=lambda x: (x["dataset"], _variant_rank(x["variant"])))
         attach_delta(anomaly_rows, ["dataset"], "f1", "vs_raw_timeF", lower_is_better=False)
+        attach_delta(
+            anomaly_rows,
+            ["dataset"],
+            "f1",
+            "vs_linear",
+            lower_is_better=False,
+            baseline_variants=("linear",),
+        )
         sections.append(
             "## Anomaly\n"
-            + markdown_table(["dataset", "variant_label", "acc", "prec", "rec", "f1", "vs_raw_timeF"], anomaly_rows)
+            + markdown_table(
+                ["dataset", "variant_label", "acc", "prec", "rec", "f1", "vs_raw_timeF", "vs_linear"],
+                anomaly_rows,
+            )
         )
 
     classification_rows = collect_classification(args.des)
     if classification_rows:
         classification_rows.sort(key=lambda x: (x["dataset"], _variant_rank(x["variant"])))
         attach_delta(classification_rows, ["dataset"], "accuracy", "vs_raw_timeF", lower_is_better=False)
+        attach_delta(
+            classification_rows,
+            ["dataset"],
+            "accuracy",
+            "vs_linear",
+            lower_is_better=False,
+            baseline_variants=("linear",),
+        )
         sections.append(
             "## Classification\n"
-            + markdown_table(["dataset", "variant_label", "accuracy", "vs_raw_timeF"], classification_rows)
+            + markdown_table(["dataset", "variant_label", "accuracy", "vs_raw_timeF", "vs_linear"], classification_rows)
         )
 
     output = "\n\n".join(sections) if sections else "未找到匹配结果。"
