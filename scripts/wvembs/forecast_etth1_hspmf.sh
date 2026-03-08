@@ -33,12 +33,12 @@ WV_ARGS=(
 )
 
 run_one() {
-  local use_hspmf="$1"
+  local mode="$1"
   local name="$2"
   local model="$3"
 
   local -a HSPMF_ARGS=()
-  if [[ "${use_hspmf}" == "1" ]]; then
+  if [[ "${mode}" != "baseline" ]]; then
     HSPMF_ARGS=(
       --use_hspmf
       --hspmf_n_fourier 16
@@ -48,11 +48,21 @@ run_one() {
       --hspmf_beta 1.0
       --hspmf_tau 1.0
       --hspmf_score_mode abs2
+      --hspmf_loss "${mode}"
     )
+    if [[ "${mode}" == "nll" ]]; then
+      HSPMF_ARGS+=(
+        --hspmf_learn_beta
+      )
+    fi
   fi
 
-  echo "[RUN] ${name}: model=${model}, use_hspmf=${use_hspmf}"
-  
+  if [[ "${mode}" == "baseline" ]]; then
+    echo "[RUN] ${name}: model=${model}, baseline WVEmbs"
+  else
+    echo "[RUN] ${name}: model=${model}, hspmf_loss=${mode}"
+  fi
+
   python -u run.py \
     --task_name long_term_forecast \
     --is_training 1 \
@@ -93,10 +103,13 @@ echo "Dataset: ${DATASET}, Pred_len: ${PRED_LEN}, Epochs: ${EPOCHS}"
 echo ""
 
 # A. 基线：Transformer + WVEmbs
-run_one 0 "baseline" "Transformer"
+run_one baseline "baseline" "Transformer"
 
-# B. HSPMF 增强：Transformer_HSPMF + HSPMF
-run_one 1 "hspmf" "Transformer_HSPMF"
+# B. HSPMF 输出头 + 点预测 MSE
+run_one mse "hspmf_mse" "Transformer_HSPMF"
+
+# C. HSPMF 输出头 + End2End-NLL
+run_one nll "hspmf_e2e_nll" "Transformer_HSPMF"
 
 echo ""
 echo "========== 实验完成 =========="

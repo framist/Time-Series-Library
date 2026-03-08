@@ -234,6 +234,42 @@ bash scripts/wvembs/no_preprocess_fair_suite.sh
 
 The script fixes the backbone / training protocol / data split and only swaps the input layer among `timeF`, `linear`, and `wv`.
 
+### WVEmbs Experiment Mapping
+
+For the WVEmbs experiments in this branch, the delivery-facing descriptions and the corresponding repo entry points are:
+
+- Forecast main table:
+  `scripts/wvembs/forecast_cycle6_table1.sh`
+  The three reported settings are "standardized time-feature baseline", "standardized WVEmbs main setting", and "no-preprocess WVEmbs fallback".
+- No-preprocess fair control:
+  `scripts/wvembs/no_preprocess_fair_suite.sh`
+  This path keeps the same backbone / split / protocol and only swaps the input layer among `timeF`, `linear`, and `wv`. Results can be summarized with `scripts/wvembs/summarize_no_preprocess_results.py`.
+- Long-horizon repair scan for ETTh2 / ETTm2:
+  `scripts/wvembs/forecast_cycle6_tuning.sh`
+- RevIN overlap ablation:
+  `scripts/wvembs/forecast_timemixer_revin_ablation.sh`
+- HSPMF verification:
+  `scripts/wvembs/forecast_etth1_hspmf.sh`
+
+The code-to-method mapping is mainly:
+
+- WVEmbs input layers and linear baselines:
+  `layers/Embed.py`, `utils/embed_utils.py`
+- Unified argument entry:
+  `run.py`
+- Forecast pipeline:
+  `exp/exp_long_term_forecasting.py`
+- HSPMF decoder and model branch:
+  `layers/HSPMF.py`, `models/Transformer_HSPMF.py`
+
+### WVEmbs Metrics Notes
+
+- When the comparison only targets the input layer itself, the branch keeps the upstream convention and does not add `--inverse`; metrics stay in the scaled space.
+- When the comparison targets `scale_mode` or final physical-value performance, `--inverse` must be enabled so that `standard` / `prior` / `none` remain comparable.
+- The no-preprocess fair control always uses `scale_mode=none`.
+- Dataset group A refers to `ETTh1 / ETTm1 / Weather`, where channel statistics are relatively stable and the standardized WVEmbs main setting is usually the best default.
+- Dataset group B refers to `ETTh2 / ETTm2`, where channel heterogeneity is stronger and long-horizon degradation is more common, so ISS or extrapolation-based fallbacks are more relevant.
+
 ### Develop Your Own Model
 - Add the model file to the folder `./models`. You can follow the `./models/Transformer.py`.
 - Create the corresponding scripts under the folder `./scripts`.

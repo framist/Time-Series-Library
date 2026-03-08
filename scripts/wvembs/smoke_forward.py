@@ -23,7 +23,7 @@ from utils.timefeatures import time_features_dim
 
 
 def _make_common_configs(model_name: str, embed: str) -> Namespace:
-    # 这套最小配置可覆盖多个主流预测 backbone（Transformer / Informer / TimesNet）。
+    # 这套最小配置可覆盖多个主流预测 backbone（Transformer / Informer / TimesNet / Transformer_HSPMF）。
     return Namespace(
         task_name="long_term_forecast",
         model=model_name,
@@ -61,6 +61,18 @@ def _make_common_configs(model_name: str, embed: str) -> Namespace:
         # TimesNet
         top_k=5,
         num_kernels=6,
+        # HSPMF
+        use_hspmf=False,
+        hspmf_n_fourier=8,
+        hspmf_period=1.0,
+        hspmf_x_range=(-6.0, 6.0),
+        hspmf_grid_size=32,
+        hspmf_beta=1.0,
+        hspmf_tau=1.0,
+        hspmf_score_mode="abs2",
+        hspmf_hier_levels=None,
+        hspmf_loss="mse",
+        hspmf_learn_beta=False,
     )
 
 
@@ -78,9 +90,14 @@ def _run_one(model_cls, cfg: Namespace):
     model.train()
     x_enc, x_mark_enc, x_dec, x_mark_dec = _make_fake_batch(cfg)
     out = model(x_enc, x_mark_enc, x_dec, x_mark_dec)
+    posterior_shape = None
+    if isinstance(out, dict):
+        posterior = out.get("posterior")
+        out = out["pred"]
+        posterior_shape = None if posterior is None else tuple(posterior.shape)
     loss = out.mean()
     loss.backward()
-    return out.shape
+    return tuple(out.shape), posterior_shape
 
 
 def main():
@@ -89,7 +106,7 @@ def main():
         "--models",
         type=str,
         default="Transformer,Informer,TimesNet",
-        help="Comma-separated model names to smoke-test: Transformer, Informer, TimesNet",
+        help="Comma-separated model names to smoke-test: Transformer, Informer, TimesNet, Transformer_HSPMF",
     )
     parser.add_argument(
         "--embed",
@@ -111,6 +128,9 @@ def main():
     parser.add_argument("--wv_extrap_scale", type=float, default=1.0)
     parser.add_argument("--wv_sampling", type=str, default="iss", choices=["iss", "jss"])
     parser.add_argument("--wv_jss_std", type=float, default=1.0)
+    parser.add_argument("--use_hspmf", action="store_true", help="对 Transformer_HSPMF 启用 HSPMF 路线")
+    parser.add_argument("--hspmf_loss", type=str, default="mse", choices=["mse", "nll"])
+    parser.add_argument("--hspmf_learn_beta", action="store_true")
     args = parser.parse_args()
 
     model_names = [x.strip() for x in args.models.split(",") if x.strip()]
@@ -127,17 +147,25 @@ def main():
         cfg.wv_extrap_scale = args.wv_extrap_scale
         cfg.wv_sampling = args.wv_sampling
         cfg.wv_jss_std = args.wv_jss_std
+        cfg.use_hspmf = args.use_hspmf
+        cfg.hspmf_loss = args.hspmf_loss
+        cfg.hspmf_learn_beta = args.hspmf_learn_beta
         if name == "Transformer":
             from models.Transformer import Model as ModelCls
         elif name == "Informer":
             from models.Informer import Model as ModelCls
         elif name == "TimesNet":
             from models.TimesNet import Model as ModelCls
+        elif name == "Transformer_HSPMF":
+            from models.Transformer_HSPMF import Model as ModelCls
         else:
             raise SystemExit(f"Unsupported model: {name}")
 
-        shape = _run_one(ModelCls, cfg)
-        print(f"[OK] {name}: out={tuple(shape)} embed={cfg.embed}")
+        shape, posterior_shape = _run_one(ModelCls, cfg)
+        msg = f"[OK] {name}: out={shape} embed={cfg.embed}"
+        if posterior_shape is not None:
+            msg += f" posterior={posterior_shape} hspmf_loss={cfg.hspmf_loss}"
+        print(msg)
 
 
 if __name__ == "__main__":

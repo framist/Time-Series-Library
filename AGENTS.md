@@ -69,7 +69,7 @@ plt.rcParams.update(font_config)
   - `scripts/wvembs/forecast_etth1_hspmf.sh`
 - 可视化：
   - `scripts/wvembs/visualize_paper_samples.py`
-  - `scripts/wvembs/export_thesis_figures.py`
+  - `scripts/wvembs/visualize_predictions.py`
   - `results/paper_visualizations/`
 
 ## 实验口径

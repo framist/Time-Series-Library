@@ -1,10 +1,12 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
+from layers.HSPMF import crps_from_pmf, nll_loss_from_pmf, targets_to_grid_index
 from utils.tools import EarlyStopping, adjust_learning_rate, visual
 from utils.metrics import metric
 import torch
 import torch.nn as nn
 from torch import optim
+import json
 import os
 import time
 import warnings
@@ -37,7 +39,56 @@ class Exp_Long_Term_Forecast(Exp_Basic):
     def _select_criterion(self):
         criterion = nn.MSELoss()
         return criterion
- 
+
+    def _core_model(self):
+        return self.model.module if isinstance(self.model, nn.DataParallel) else self.model
+
+    def _split_model_output(self, model_output):
+        if isinstance(model_output, dict):
+            pred = model_output.get("pred")
+            if pred is None:
+                raise ValueError("HSPMF 输出缺少 pred 字段")
+            return pred, model_output
+        return model_output, None
+
+    def _slice_forecast_tensors(self, pred, batch_y, aux=None):
+        f_dim = -1 if self.args.features == 'MS' else 0
+        pred = pred[:, -self.args.pred_len:, f_dim:]
+        true = batch_y[:, -self.args.pred_len:, f_dim:]
+        posterior = None
+        if aux is not None and "posterior" in aux:
+            posterior = aux["posterior"][:, -self.args.pred_len:, f_dim:, :]
+        return pred, true, posterior
+
+    def _compute_loss(self, pred, true, posterior, criterion):
+        hspmf_loss = str(getattr(self.args, "hspmf_loss", "mse")).lower()
+        if hspmf_loss == "nll":
+            if posterior is None:
+                raise RuntimeError("hspmf_loss=nll 需要模型返回 posterior")
+            decoder = getattr(self._core_model(), "hspmf_decoder", None)
+            if decoder is None:
+                raise RuntimeError("当前模型未挂载 hspmf_decoder")
+            target_idx = targets_to_grid_index(true, decoder.x_grid)
+            return nll_loss_from_pmf(posterior, target_idx)
+        return criterion(pred, true)
+
+    def _compute_hspmf_eval_metrics(self, posterior, true):
+        decoder = getattr(self._core_model(), "hspmf_decoder", None)
+        if decoder is None:
+            raise RuntimeError("当前模型未挂载 hspmf_decoder")
+        target_idx = targets_to_grid_index(true, decoder.x_grid)
+        nll = nll_loss_from_pmf(posterior, target_idx)
+        crps = crps_from_pmf(posterior, true, decoder.x_grid)
+        return nll, crps, int(true.numel())
+
+    def _current_hspmf_beta(self):
+        core_model = self._core_model()
+        if not hasattr(core_model, "get_hspmf_beta"):
+            return None
+        beta = core_model.get_hspmf_beta()
+        if beta is None:
+            return None
+        return float(beta.detach().cpu().item())
 
     def vali(self, vali_data, vali_loader, criterion):
         loss_sum = torch.zeros((), device=self.device, dtype=torch.float32)
@@ -61,15 +112,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float()
                 # encoder - decoder
                 with torch.cuda.amp.autocast(enabled=use_amp):
-                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:]
-
-                pred = outputs.detach()
-                true = batch_y.detach()
-
-                loss = criterion(pred, true)
+                    model_output = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                outputs, aux = self._split_model_output(model_output)
+                outputs, batch_y, posterior = self._slice_forecast_tensors(outputs, batch_y, aux)
+                loss = self._compute_loss(outputs, batch_y, posterior, criterion)
                 loss_sum += loss.detach().float()
                 loss_count += 1
         total_loss = (loss_sum / max(1, loss_count)).item()
@@ -122,19 +168,15 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 # encoder - decoder
                 if use_amp:
                     with torch.cuda.amp.autocast(enabled=True):
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-
-                        f_dim = -1 if self.args.features == 'MS' else 0
-                        outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                        batch_y = batch_y[:, -self.args.pred_len:, f_dim:]
-                        loss = criterion(outputs, batch_y)
+                        model_output = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                        outputs, aux = self._split_model_output(model_output)
+                        outputs, batch_y_sliced, posterior = self._slice_forecast_tensors(outputs, batch_y, aux)
+                        loss = self._compute_loss(outputs, batch_y_sliced, posterior, criterion)
                 else:
-                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-
-                    f_dim = -1 if self.args.features == 'MS' else 0
-                    outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                    batch_y = batch_y[:, -self.args.pred_len:, f_dim:]
-                    loss = criterion(outputs, batch_y)
+                    model_output = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    outputs, aux = self._split_model_output(model_output)
+                    outputs, batch_y_sliced, posterior = self._slice_forecast_tensors(outputs, batch_y, aux)
+                    loss = self._compute_loss(outputs, batch_y_sliced, posterior, criterion)
                 train_loss_sum += loss.detach().float()
                 train_loss_count += 1
 
@@ -208,6 +250,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         max_test_steps = getattr(self.args, 'max_test_steps', -1)
         use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
         non_blocking = (self.device.type == "cuda")
+        hspmf_nll_sum = 0.0
+        hspmf_crps_sum = 0.0
+        hspmf_metric_count = 0
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
                 if max_test_steps > 0 and i >= max_test_steps:
@@ -223,13 +268,20 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float()
                 # encoder - decoder
                 with torch.cuda.amp.autocast(enabled=use_amp):
-                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    model_output = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, :]
-                batch_y = batch_y[:, -self.args.pred_len:, :].to(self.device)
-                outputs = outputs.detach().cpu().numpy()
-                batch_y = batch_y.detach().cpu().numpy()
+                outputs, aux = self._split_model_output(model_output)
+                outputs_full = outputs[:, -self.args.pred_len:, :]
+                batch_y_full = batch_y[:, -self.args.pred_len:, :].to(self.device)
+                outputs_sliced, batch_y_sliced, posterior = self._slice_forecast_tensors(outputs, batch_y, aux)
+                if posterior is not None:
+                    batch_nll, batch_crps, batch_count = self._compute_hspmf_eval_metrics(posterior, batch_y_sliced)
+                    hspmf_nll_sum += float(batch_nll.detach().cpu().item()) * batch_count
+                    hspmf_crps_sum += float(batch_crps.detach().cpu().item()) * batch_count
+                    hspmf_metric_count += batch_count
+
+                outputs = outputs_full.detach().cpu().numpy()
+                batch_y = batch_y_full.detach().cpu().numpy()
                 if test_data.scale and self.args.inverse:
                     shape = batch_y.shape
                     if outputs.shape[-1] != batch_y.shape[-1]:
@@ -237,6 +289,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     outputs = test_data.inverse_transform(outputs.reshape(shape[0] * shape[1], -1)).reshape(shape)
                     batch_y = test_data.inverse_transform(batch_y.reshape(shape[0] * shape[1], -1)).reshape(shape)
 
+                f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, :, f_dim:]
                 batch_y = batch_y[:, :, f_dim:]
 
@@ -314,9 +367,37 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 print('[ExtrapEval] no out-of-domain samples')
             extrap_info = f', mse_in:{mse_in}, mae_in:{mae_in}, mse_out:{mse_out}, mae_out:{mae_out}, n_in:{n_in}, n_out:{n_out}'
 
+        hspmf_info = ''
+        if hspmf_metric_count > 0:
+            hspmf_nll = hspmf_nll_sum / hspmf_metric_count
+            hspmf_crps = hspmf_crps_sum / hspmf_metric_count
+            hspmf_beta = self._current_hspmf_beta()
+            hspmf_info = f', hspmf_nll:{hspmf_nll}, hspmf_crps:{hspmf_crps}'
+            if hspmf_beta is not None:
+                hspmf_info += f', hspmf_beta:{hspmf_beta}'
+            print(f'[HSPMF] nll:{hspmf_nll:.6f}, crps:{hspmf_crps:.6f}, beta:{hspmf_beta}')
+
+            decoder = getattr(self._core_model(), "hspmf_decoder", None)
+            hspmf_metrics = {
+                "nll": hspmf_nll,
+                "crps": hspmf_crps,
+                "beta": hspmf_beta,
+                "space": "decoder_grid",
+            }
+            if decoder is not None:
+                hspmf_metrics.update(
+                    {
+                        "x_grid_min": float(decoder.x_grid[0].detach().cpu().item()),
+                        "x_grid_max": float(decoder.x_grid[-1].detach().cpu().item()),
+                        "grid_size": int(decoder.x_grid.numel()),
+                    }
+                )
+            with open(os.path.join(folder_path, 'hspmf_dist_metrics.json'), 'w', encoding='utf-8') as fh:
+                json.dump(hspmf_metrics, fh, ensure_ascii=False, indent=2)
+
         f = open("result_long_term_forecast.txt", 'a')
         f.write(setting + "  \n")
-        f.write('mse:{}, mae:{}, dtw:{}'.format(mse, mae, dtw) + extrap_info)
+        f.write('mse:{}, mae:{}, dtw:{}'.format(mse, mae, dtw) + extrap_info + hspmf_info)
         f.write('\n')
         f.write('\n')
         f.close()

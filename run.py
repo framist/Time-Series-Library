@@ -126,6 +126,10 @@ if __name__ == '__main__':
                         help='HSPMF 锐化系数（后验锐度）')
     parser.add_argument('--hspmf_tau', type=float, default=1.0,
                         help='HSPMF 温度系数（softmax 温度）')
+    parser.add_argument('--hspmf_loss', type=str, default='mse', choices=['mse', 'nll'],
+                        help='HSPMF 训练目标：mse=后验均值的点预测 MSE；nll=离散后验的 End2End-NLL')
+    parser.add_argument('--hspmf_learn_beta', action='store_true', default=False,
+                        help='将 HSPMF 的 beta 设为可学习参数（End2End-NLL 推荐开启）')
     parser.add_argument('--hspmf_score_mode', type=str, default='abs2', choices=['real', 'abs2'],
                         help='HSPMF 分数模式：real=实部，abs2=模平方（默认abs2对齐论文）')
     parser.add_argument('--hspmf_hier_levels', type=int, nargs='+', default=None,

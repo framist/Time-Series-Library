@@ -9,6 +9,7 @@ def print_args(args):
     print(f'  {"Data Path:":<20}{args.data_path:<20}{"Features:":<20}{args.features:<20}')
     print(f'  {"Target:":<20}{args.target:<20}{"Freq:":<20}{args.freq:<20}')
     print(f'  {"Checkpoints:":<20}{args.checkpoints:<20}')
+    print(f'  {"Scale Mode:":<20}{args.scale_mode:<20}')
     print()
 
     if args.task_name in ['long_term_forecast', 'short_term_forecast']:
@@ -38,6 +39,19 @@ def print_args(args):
     print(f'  {"Distil:":<20}{args.distil:<20}{"Dropout:":<20}{args.dropout:<20}')
     print(f'  {"Embed:":<20}{args.embed:<20}{"Activation:":<20}{args.activation:<20}')
     print()
+
+    if getattr(args, 'use_hspmf', False):
+        x_range = getattr(args, 'hspmf_x_range', None)
+        x_range_str = 'None' if x_range is None else ' '.join(map(str, x_range))
+        hier_levels = getattr(args, 'hspmf_hier_levels', None)
+        hier_levels_str = 'auto' if hier_levels is None else ' '.join(map(str, hier_levels))
+        print("\033[1m" + "HSPMF" + "\033[0m")
+        print(f'  {"HSPMF Loss:":<20}{args.hspmf_loss:<20}{"Learn Beta:":<20}{args.hspmf_learn_beta:<20}')
+        print(f'  {"N Fourier:":<20}{args.hspmf_n_fourier:<20}{"Period:":<20}{args.hspmf_period:<20}')
+        print(f'  {"Grid Size:":<20}{args.hspmf_grid_size:<20}{"X Range:":<20}{x_range_str:<20}')
+        print(f'  {"Beta Init:":<20}{args.hspmf_beta:<20}{"Tau:":<20}{args.hspmf_tau:<20}')
+        print(f'  {"Score Mode:":<20}{args.hspmf_score_mode:<20}{"Hier Levels:":<20}{hier_levels_str:<20}')
+        print()
 
     print("\033[1m" + "Run Parameters" + "\033[0m")
     print(f'  {"Num Workers:":<20}{args.num_workers:<20}{"Itr:":<20}{args.itr:<20}')

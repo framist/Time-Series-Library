@@ -5,7 +5,7 @@
 ## 结论摘要
 
 - WVEmbs 的稳定收益集中在 Forecast，尤其是 Transformer。
-- 当前主推荐配置是 `embed=wv, scale_mode=standard, wv_sampling=jss, wv_jss_std=0.25`。
+- 当前主推荐配置是“标准化后的 WVEmbs 主配置（联合谱采样，`jss_std=0.25`）”。
 - 数据集存在两类响应模式：
   - ETTh1 / ETTm1 / Weather：`standard + jss(0.25)` 稳定改善。
   - ETTh2 / ETTm2：短期可改善，但长预测上 JSS 共享采样会失效，ISS 或 `extrap` 更鲁棒。
@@ -26,19 +26,19 @@
 - 阶段 1（`scale_mode` 对照与主表）：统一加 `--inverse`，比较原始物理量尺度。
 - 无预处理公平对照：统一用 `scale_mode=none`，当前实现已支持 `embed=timeF / linear / wv` 三组输入层对照。
 - `prior_scale` 默认按 `max(|x_train|) × 2` 初始化。
-- 主表三组配置：
+- 主表三组配置（交付表述）：
 
-| 标签 | 配置 |
+| 名称 | 配置 |
 |---|---|
-| `timeF_std` | `embed=timeF, scale_mode=standard` |
-| `wv_std_jss` | `embed=wv, scale_mode=standard, wv_sampling=jss, wv_jss_std=0.25` |
-| `wv_none_iss_extrap` | `embed=wv, scale_mode=none, wv_sampling=iss, wv_extrap_mode=scale, wv_extrap_scale=5.0` |
+| 标准化时间特征基线 | `embed=timeF, scale_mode=standard` |
+| 标准化 WVEmbs 主配置 | `embed=wv, scale_mode=standard, wv_sampling=jss, wv_jss_std=0.25` |
+| 无预处理 WVEmbs 备选 | `embed=wv, scale_mode=none, wv_sampling=iss, wv_extrap_mode=scale, wv_extrap_scale=5.0` |
 
 ## Forecast 主表（Transformer）
 
 ### ETTh1
 
-| pred_len | timeF_std | wv_std_jss | vs baseline | wv_none_iss_extrap | vs baseline |
+| pred_len | 标准化时间特征基线 | 标准化 WVEmbs 主配置 | 相对基线 | 无预处理 WVEmbs 备选 | 相对基线 |
 |---|---|---|---:|---|---:|
 | 96 | `26.585 / 3.293` | **`11.683 / 2.023`** | **-56.1%** | `15.866 / 2.706` | -40.3% |
 | 192 | `24.324 / 3.185` | **`15.828 / 2.472`** | **-34.9%** | `20.239 / 2.980` | -16.8% |
@@ -47,7 +47,7 @@
 
 ### ETTh2
 
-| pred_len | timeF_std | wv_std_jss | vs baseline | wv_none_iss_extrap | vs baseline |
+| pred_len | 标准化时间特征基线 | 标准化 WVEmbs 主配置 | 相对基线 | 无预处理 WVEmbs 备选 | 相对基线 |
 |---|---|---|---:|---|---:|
 | 96 | `105.755 / 8.462` | **`84.970 / 6.985`** | **-19.7%** | `86.061 / 7.767` | -18.6% |
 | 192 | `321.578 / 15.208` | `229.832 / 13.284` | -28.5% | **`92.124 / 8.084`** | **-71.4%** |
@@ -56,7 +56,7 @@
 
 ### ETTm1
 
-| pred_len | timeF_std | wv_std_jss | vs baseline | wv_none_iss_extrap | vs baseline |
+| pred_len | 标准化时间特征基线 | 标准化 WVEmbs 主配置 | 相对基线 | 无预处理 WVEmbs 备选 | 相对基线 |
 |---|---|---|---:|---|---:|
 | 96 | `10.198 / 1.844` | `8.087 / 1.598` | -20.7% | **`7.464 / 1.588`** | **-26.8%** |
 | 192 | `13.726 / 2.073` | **`9.196 / 1.735`** | **-33.0%** | `10.462 / 1.910` | -23.8% |
@@ -65,7 +65,7 @@
 
 ### ETTm2
 
-| pred_len | timeF_std | wv_std_jss | vs baseline | wv_none_iss_extrap | vs baseline |
+| pred_len | 标准化时间特征基线 | 标准化 WVEmbs 主配置 | 相对基线 | 无预处理 WVEmbs 备选 | 相对基线 |
 |---|---|---|---:|---|---:|
 | 96 | `29.525 / 3.809` | **`16.644 / 2.922`** | **-43.6%** | `35.283 / 4.457` | +19.5% |
 | 192 | `65.911 / 5.672` | **`60.682 / 5.843`** | **-7.9%** | `97.952 / 7.478` | +48.6% |
@@ -74,7 +74,7 @@
 
 ### Weather
 
-| pred_len | timeF_std | wv_std_jss | vs baseline | wv_none_iss_extrap | vs baseline |
+| pred_len | 标准化时间特征基线 | 标准化 WVEmbs 主配置 | 相对基线 | 无预处理 WVEmbs 备选 | 相对基线 |
 |---|---|---|---:|---|---:|
 | 96 | `7016.614 / 26.169` | **`4172.800 / 22.767`** | **-40.5%** | `64645.300 / 115.299` | +821.3% |
 | 192 | `10806.400 / 33.668` | **`6566.800 / 24.978`** | **-39.2%** | `64876.500 / 115.530` | +500.4% |
@@ -83,16 +83,16 @@
 
 ### 主表观察
 
-- `wv_std_jss` 是最稳健的主配置，在 ETTh1 / ETTm1 / Weather 全面获益。
-- ETTh2 / ETTm2 属于异质通道数据集，`wv_std_jss` 的共享采样假设在长预测上失效。
-- `wv_none_iss_extrap` 与 `wv_std_jss` 呈互补关系：
+- “标准化 WVEmbs 主配置”是最稳健的主配置，在 ETTh1 / ETTm1 / Weather 全面获益。
+- ETTh2 / ETTm2 属于异质通道更强的数据集，“标准化 WVEmbs 主配置”的共享采样假设在长预测上失效。
+- “无预处理 WVEmbs 备选”与“标准化 WVEmbs 主配置”呈互补关系：
   - 对 ETTh2 / ETTm2 的部分长预测明显更强。
   - 对 Weather 会灾难性崩溃，不适合作为通用默认项。
 - ETTh2 `pred_len=720` 仍是当前最难点，暂无稳定修复方案。
 
 ## 多 Backbone 与其他任务
 
-### ETTh1 Forecast 多 Backbone（`pred_len=96`，stage 0）
+### ETTh1 Forecast 多 Backbone（`pred_len=96`，缩放空间下的嵌入层对照）
 
 | backbone | timeF | 最优 WV 配置 | 结论 |
 |---|---|---|---|
@@ -175,6 +175,7 @@
 保留的关键产物：
 
 - 无预处理公平对照：`scripts/wvembs/no_preprocess_fair_suite.sh`
+- 无预处理结果汇总：`scripts/wvembs/summarize_no_preprocess_results.py`
 - 主实验脚本：`scripts/wvembs/forecast_cycle6_table1.sh`
 - 退化调参：`scripts/wvembs/forecast_cycle6_tuning.sh`
 - RevIN 消融：`scripts/wvembs/forecast_timemixer_revin_ablation.sh`

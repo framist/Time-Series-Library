@@ -18,6 +18,7 @@ set -euo pipefail
 #   bash scripts/wvembs/no_preprocess_fair_suite.sh
 #   RUN_FORECAST=1 RUN_IMPUTATION=0 RUN_ANOMALY=0 RUN_CLASSIFICATION=0 bash scripts/wvembs/no_preprocess_fair_suite.sh
 #   PRED_LENS="96 336" WV_EXTRAP_MODE=scale WV_EXTRAP_SCALE=5.0 bash scripts/wvembs/no_preprocess_fair_suite.sh
+#   FAIR_EMBEDS="wv" WV_EXTRAP_MODE=scale WV_EXTRAP_SCALE=5.0 bash scripts/wvembs/no_preprocess_fair_suite.sh
 
 DES="${DES:-WVEmbsNoPreprocessFair}"
 USE_AMP="${USE_AMP:-1}"
@@ -34,7 +35,8 @@ RUN_WEATHER="${RUN_WEATHER:-1}"
 PRED_LENS="${PRED_LENS:-96 192 336 720}"
 read -r -a PRED_LENS_ARR <<< "${PRED_LENS}"
 
-FAIR_EMBEDS=(timeF linear wv)
+FAIR_EMBEDS="${FAIR_EMBEDS:-timeF linear wv}"
+read -r -a FAIR_EMBEDS_ARR <<< "${FAIR_EMBEDS}"
 
 WV_SAMPLING="${WV_SAMPLING:-iss}"
 WV_JSS_STD="${WV_JSS_STD:-1.0}"
@@ -259,8 +261,8 @@ run_classification_one() {
 
 if [[ "${RUN_FORECAST}" == "1" ]]; then
   if [[ "${RUN_ETTH1}" == "1" ]]; then
-    for pred_len in "${PRED_LENS_ARR[@]}"; do
-      for embed in "${FAIR_EMBEDS[@]}"; do
+      for pred_len in "${PRED_LENS_ARR[@]}"; do
+      for embed in "${FAIR_EMBEDS_ARR[@]}"; do
         run_forecast_one ETTh1 ./dataset/ETT-small ETTh1.csv ETTh1 7 h "${pred_len}" "${embed}"
       done
     done
@@ -268,7 +270,7 @@ if [[ "${RUN_FORECAST}" == "1" ]]; then
 
   if [[ "${RUN_ETTH2}" == "1" ]]; then
     for pred_len in "${PRED_LENS_ARR[@]}"; do
-      for embed in "${FAIR_EMBEDS[@]}"; do
+      for embed in "${FAIR_EMBEDS_ARR[@]}"; do
         run_forecast_one ETTh2 ./dataset/ETT-small ETTh2.csv ETTh2 7 h "${pred_len}" "${embed}"
       done
     done
@@ -276,7 +278,7 @@ if [[ "${RUN_FORECAST}" == "1" ]]; then
 
   if [[ "${RUN_WEATHER}" == "1" ]]; then
     for pred_len in "${PRED_LENS_ARR[@]}"; do
-      for embed in "${FAIR_EMBEDS[@]}"; do
+      for embed in "${FAIR_EMBEDS_ARR[@]}"; do
         run_forecast_one Weather ./dataset/weather weather.csv custom 21 t "${pred_len}" "${embed}"
       done
     done
@@ -284,19 +286,19 @@ if [[ "${RUN_FORECAST}" == "1" ]]; then
 fi
 
 if [[ "${RUN_IMPUTATION}" == "1" ]]; then
-  for embed in "${FAIR_EMBEDS[@]}"; do
+  for embed in "${FAIR_EMBEDS_ARR[@]}"; do
     run_imputation_one "${embed}"
   done
 fi
 
 if [[ "${RUN_ANOMALY}" == "1" ]]; then
-  for embed in "${FAIR_EMBEDS[@]}"; do
+  for embed in "${FAIR_EMBEDS_ARR[@]}"; do
     run_anomaly_one "${embed}"
   done
 fi
 
 if [[ "${RUN_CLASSIFICATION}" == "1" ]]; then
-  for embed in "${FAIR_EMBEDS[@]}"; do
+  for embed in "${FAIR_EMBEDS_ARR[@]}"; do
     run_classification_one "${embed}"
   done
 fi

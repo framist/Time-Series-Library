@@ -59,8 +59,8 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 
 ### 数据集族群
 
-- 族群 A：ETTh1、ETTm1、Weather。`standard + jss(0.25)` 稳定改善。
-- 族群 B：ETTh2、ETTm2。JSS 共享采样在长预测上容易失效，ISS 或 `extrap` 更值得尝试。
+- 族群 A：ETTh1、ETTm1、Weather。它们的通道统计关系相对更稳定，使用“标准化 + 联合谱采样（`jss_std=0.25`）”通常能稳定改善。
+- 族群 B：ETTh2、ETTm2。它们的通道异质性更强、长预测更容易退化，JSS 共享采样更容易失效，ISS 或 `extrap` 更值得尝试。
 
 ### backbone 偏好
 
@@ -99,27 +99,25 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 
 ### 主实验
 
-- `scripts/wvembs/no_preprocess_fair_suite.sh`
-- `scripts/wvembs/forecast_cycle6_table1.sh`
-- `scripts/wvembs/forecast_cycle6_tuning.sh`
-- `scripts/wvembs/run_final_suite.sh`
+- 无预处理公平对照：`scripts/wvembs/no_preprocess_fair_suite.sh`
+- 无预处理结果汇总：`scripts/wvembs/summarize_no_preprocess_results.py`
+- Forecast 主表生成：`scripts/wvembs/forecast_cycle6_table1.sh`
+- Forecast 退化点修复扫描：`scripts/wvembs/forecast_cycle6_tuning.sh`
+- 当前完整实验套件入口：`scripts/wvembs/run_final_suite.sh`
 
 ### 关键消融
 
-- `scripts/wvembs/forecast_etth1_cycle4_3factor.sh`
-- `scripts/wvembs/forecast_etth1_cycle4_wvbase.sh`
-- `scripts/wvembs/forecast_etth2_cycle4_jssstd.sh`
-- `scripts/wvembs/forecast_etth1_cycle5_mask.sh`
-- `scripts/wvembs/forecast_etth1_cycle5_extrap.sh`
-- `scripts/wvembs/forecast_cycle5_crossval.sh`
-- `scripts/wvembs/forecast_timemixer_revin_ablation.sh`
-- `scripts/wvembs/forecast_etth1_hspmf.sh`
+- 因子交互与 `wv_base` 扫描：`scripts/wvembs/forecast_etth1_cycle4_3factor.sh`、`scripts/wvembs/forecast_etth1_cycle4_wvbase.sh`
+- ETTh2 的 `jss_std` 修复扫描：`scripts/wvembs/forecast_etth2_cycle4_jssstd.sh`
+- 掩码与外推消融：`scripts/wvembs/forecast_etth1_cycle5_mask.sh`、`scripts/wvembs/forecast_etth1_cycle5_extrap.sh`
+- 交叉验证：`scripts/wvembs/forecast_cycle5_crossval.sh`
+- RevIN 功能重叠消融：`scripts/wvembs/forecast_timemixer_revin_ablation.sh`
+- HSPMF 验证：`scripts/wvembs/forecast_etth1_hspmf.sh`
 
 ### 可视化
 
-- `scripts/wvembs/plot_cycle4.py`
-- `scripts/wvembs/plot_cycle5.py`
-- `scripts/wvembs/visualize_paper_samples.py`
+- 退化修复相关作图：`scripts/wvembs/plot_cycle4.py`、`scripts/wvembs/plot_cycle5.py`
+- 论文版式示意图：`scripts/wvembs/visualize_paper_samples.py`
 
 ## 已知限制
 

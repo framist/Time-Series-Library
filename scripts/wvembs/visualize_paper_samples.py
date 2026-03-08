@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """
-论文级预测可视化 - 简化版（从结果文件直接生成）
+论文可视化示意图生成脚本（基于合成轨迹）
 
 功能：
 1. 从已有实验结果中读取预测数据
-2. 生成论文级的可视化图：
+2. 生成用于版式预演与风格讨论的示意图：
    - 预测样例对比图（真实值 vs 不同方法）
    - 多预测长度对比图
    - 多数据集性能雷达图
+
+注意：
+- 本脚本会为单条样例图与多预测长度图合成“看起来像真实预测”的轨迹，
+  适合讨论图形风格、配色、标注密度与版式。
+- 它不能替代基于真实模型检查点/真实预测结果的终稿导图。
+- 若要生成论文最终图，请优先使用 `visualize_predictions.py` 或基于真实 `results/` 目录另行导出。
 
 用法：
     python scripts/wvembs/visualize_paper_samples.py \
@@ -738,7 +744,7 @@ def plot_performance_summary(outpath: str, records: List[Dict]):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="生成论文级可视化样例")
+    parser = argparse.ArgumentParser(description="生成论文示意级可视化（含合成样例轨迹）")
     parser.add_argument(
         "--results",
         type=str,
@@ -765,7 +771,7 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
 
     print("=" * 80)
-    print("论文级可视化样例生成")
+    print("论文示意图生成（含合成轨迹，不用于终稿定量结论）")
     print(f"数据集: {args.dataset}, 预测长度: {args.pred_len}")
     print("=" * 80)
 
