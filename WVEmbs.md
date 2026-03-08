@@ -118,6 +118,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 - 交叉验证：`scripts/wvembs/forecast_cycle5_crossval.sh`
 - RevIN 功能重叠消融：`scripts/wvembs/forecast_timemixer_revin_ablation.sh`
 - HSPMF 验证：`scripts/wvembs/forecast_etth1_hspmf.sh`、`scripts/wvembs/forecast_hspmf_e2e.py`
+  - 可用 `RUN_BASELINE=0/1`、`RUN_MSE=0/1`、`RUN_NLL=0/1` 控制是否执行对应分支，预算紧张时可先保留 baseline 与 NLL
 
 ### 可视化
 

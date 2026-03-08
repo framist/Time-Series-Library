@@ -259,6 +259,7 @@ For the WVEmbs experiments in this branch, the delivery-facing descriptions and 
   `scripts/wvembs/forecast_etth1_hspmf.sh`
   For the standalone End2End-NLL route without `run.py`, use `scripts/wvembs/forecast_hspmf_e2e.py`.
   This script now covers the plain WVEmbs baseline, the HSPMF point-MSE route, and the End2End-NLL route. HSPMF test runs additionally write `hspmf_dist_metrics.json` with `nll / crps / beta`.
+  When the remaining budget is tight, `RUN_BASELINE=0/1`, `RUN_MSE=0/1`, and `RUN_NLL=0/1` can be used to keep only the most important branches.
 
 The code-to-method mapping is mainly:
 

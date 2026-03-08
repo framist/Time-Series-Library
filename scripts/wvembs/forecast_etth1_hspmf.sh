@@ -20,6 +20,9 @@ WORKERS="${WORKERS:-8}"
 DES="${DES:-HSPMF_Validation}"
 
 USE_AMP="${USE_AMP:-1}"
+RUN_BASELINE="${RUN_BASELINE:-1}"
+RUN_MSE="${RUN_MSE:-1}"
+RUN_NLL="${RUN_NLL:-1}"
 
 AMP_ARGS=()
 if [[ "${USE_AMP}" == "1" ]]; then
@@ -103,13 +106,19 @@ echo "Dataset: ${DATASET}, Pred_len: ${PRED_LEN}, Epochs: ${EPOCHS}"
 echo ""
 
 # A. 基线：Transformer + WVEmbs
-run_one baseline "baseline" "Transformer"
+if [[ "${RUN_BASELINE}" == "1" ]]; then
+  run_one baseline "baseline" "Transformer"
+fi
 
 # B. HSPMF 输出头 + 点预测 MSE
-run_one mse "hspmf_mse" "Transformer_HSPMF"
+if [[ "${RUN_MSE}" == "1" ]]; then
+  run_one mse "hspmf_mse" "Transformer_HSPMF"
+fi
 
 # C. HSPMF 输出头 + End2End-NLL
-run_one nll "hspmf_e2e_nll" "Transformer_HSPMF"
+if [[ "${RUN_NLL}" == "1" ]]; then
+  run_one nll "hspmf_e2e_nll" "Transformer_HSPMF"
+fi
 
 echo ""
 echo "========== 实验完成 =========="
