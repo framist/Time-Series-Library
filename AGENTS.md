@@ -2,7 +2,7 @@
 
 背景资料优先参考 [正在书写的论文](../latex) 与思源中的 [大论文](siyuan://blocks/20250111201630-mbi59gv) / [WVEmbs：Dirac 测度在对偶谱上的取样](siyuan://blocks/20250712140205-01pdiso)。[HSPMF 相关实验](../HSPMF) 也可以参考。
 
-本仓库用于逐步完成 WVEmbs 在时间序列任务上的实验、复盘与论文材料整理。默认先确定目前的任务，探索上下文，再做代码修改、测试、记录、commit 的循环；三份文档只保留最新结论，不保留已经失效的历史过程稿。
+本仓库用于逐步完成 WVEmbs 在时间序列任务上的实验、复盘与论文材料整理。默认先确定目前的任务，探索上下文，再做代码修改、测试、完整实验、记录与评估、commit 的循环；三份文档只保留最新结论，不保留已经失效的历史过程稿。
 
 ## 环境
 
@@ -38,6 +38,7 @@ plt.rcParams.update(font_config)
   - 补一组“无预处理公平对照”实验：固定同一 backbone、同一训练协议与同一数据划分，仅替换输入层为“原始/线性嵌入”与 `WVEmbs`，并统一关闭数据预处理（至少关闭 `standard/prior` 与 RevIN 一类依赖统计量的变换）。优先在 Forecast 主线的 `Transformer` 上覆盖 ETTh1 / ETTh2 / Weather，目标是回答“双方都不做预处理时，WVEmbs 是否仍具备更好的可训练性、泛化性与性能增益”。若 `none + timeF/linear` 出现 NaN、发散或明显不稳，不视为无效结果，而应作为“WVEmbs 更适合无预处理部署”的证据单独记录。
     - 也要包括无预处理场景下 Imputation / Anomaly / Classification 的实验结果。
     - 为了体现无预处理场景的实际意义，WVEmbs 要求的预处理（对数据集线性变换）可以改为设置宽松的 WVEmbs 内部参数
+    - 当前实现进度：已补 `embed=linear` / `linear_timeF` 这类线性输入层基线，并新增 `scripts/wvembs/no_preprocess_fair_suite.sh` 统一入口；已完成小预算链路验证，下一步是完整预算重跑并回填 `Report.md`
   - HSPMF 检查现有实现是否正确合理，特别目前缺少了 End2End-NLL 的训练方法，可以参考 ../HSPMF 中的实验方法和一些已有结果；注意需要用分布拟合相关指标来体现 HSPMF 的优势点；另外也尝试验证“纯 WVEmbs backbone + 推理期 HSPMF 解码”路线。
   - 类如 cycle 这些实验名在交付论文的图表，不要有这些内部名、脚本与代码名，而是用自然语言描述。族群 A、族群 B 也需要加以说明
 - 中优先：
@@ -60,6 +61,7 @@ plt.rcParams.update(font_config)
   - `layers/HSPMF.py`
   - `models/Transformer_HSPMF.py`
 - 核心脚本：
+  - `scripts/wvembs/no_preprocess_fair_suite.sh`
   - `scripts/wvembs/run_final_suite.sh`
   - `scripts/wvembs/forecast_cycle6_table1.sh`
   - `scripts/wvembs/forecast_cycle6_tuning.sh`
@@ -74,6 +76,7 @@ plt.rcParams.update(font_config)
 
 - 阶段 0（embed 对照）：不加 `--inverse`，指标在缩放空间，对齐上游默认口径。
 - 阶段 1（`scale_mode` 对照）：必须显式加 `--inverse`，否则 `standard/prior/none` 不可比。
+- 无预处理公平对照：统一用 `scale_mode=none`，优先比较 `embed=timeF / linear / wv`；其中 `linear` 表示“值与 `timeF` 时间特征统一拼接后做线性投影”的输入层基线。
 - `prior_scale` 统一按 `max(|x_train|) × 2` 初始化，再按数据集修正。
 - `scale_mode=none` 不是稳健基线；`none + timeF` 在 ETTh2 / ETTm2 / Weather / ECL 上都出现过 NaN。
 - `zsh` 下包含 `*`、`[]`、反斜杠的参数必须加引号。

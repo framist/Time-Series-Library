@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils import weight_norm
 import math
-from utils.embed_utils import parse_embed_arg, is_wv_unified
+from utils.embed_utils import parse_embed_arg, is_unified_embed
 from utils.timefeatures import time_features_dim
 
 
@@ -42,6 +42,17 @@ class TokenEmbedding(nn.Module):
     def forward(self, x):
         x = self.tokenConv(x.permute(0, 2, 1)).transpose(1, 2)
         return x
+
+
+class LinearValueEmbedding(nn.Module):
+    """纯线性输入层，用于无预处理场景下与 WVEmbs 做公平对照。"""
+
+    def __init__(self, c_in, d_model):
+        super(LinearValueEmbedding, self).__init__()
+        self.proj = nn.Linear(c_in, d_model)
+
+    def forward(self, x):
+        return self.proj(x)
 
 
 class FixedEmbedding(nn.Module):
@@ -280,24 +291,33 @@ class DataEmbedding(nn.Module):
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1, wv_cfg=None):
         super(DataEmbedding, self).__init__()
 
-        self.wv_unified = is_wv_unified(embed_type)
+        self.unified_embed = is_unified_embed(embed_type)
 
         time_embed_type, value_embed_type = parse_embed_arg(embed_type)
 
-        if self.wv_unified:
-            # 统一 WVEmbs：将时间特征视为“物理量通道”，与 x 沿通道维拼接后一起进入 WV-Lift
+        if self.unified_embed:
+            # 统一输入层：将时间特征视为“物理量通道”，与 x 沿通道维拼接后一起进入前端嵌入
             self.time_feat_dim = int(time_features_dim(freq))
-            self.value_embedding = WVLiftEmbedding(
-                c_in=c_in + self.time_feat_dim,
-                d_model=d_model,
-                dropout=dropout,
-                wv_cfg=wv_cfg,
-            )
+            if value_embed_type == 'wv':
+                self.value_embedding = WVLiftEmbedding(
+                    c_in=c_in + self.time_feat_dim,
+                    d_model=d_model,
+                    dropout=dropout,
+                    wv_cfg=wv_cfg,
+                )
+            elif value_embed_type == 'linear':
+                self.value_embedding = LinearValueEmbedding(c_in=c_in + self.time_feat_dim, d_model=d_model)
+            else:
+                raise ValueError(f"统一输入层模式仅支持 value_embed_type in {{'wv', 'linear'}}，但得到 {value_embed_type!r}")
             self.temporal_embedding = None
         else:
             self.time_feat_dim = None
-            self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout, wv_cfg=wv_cfg) \
-                if value_embed_type == 'wv' else TokenEmbedding(c_in=c_in, d_model=d_model)
+            if value_embed_type == 'wv':
+                self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout, wv_cfg=wv_cfg)
+            elif value_embed_type == 'linear':
+                self.value_embedding = LinearValueEmbedding(c_in=c_in, d_model=d_model)
+            else:
+                self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
             self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=time_embed_type,
                                                         freq=freq) if time_embed_type != 'timeF' else TimeFeatureEmbedding(
                 d_model=d_model, embed_type=time_embed_type, freq=freq)
@@ -306,7 +326,7 @@ class DataEmbedding(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, x_mark):
-        if self.wv_unified:
+        if self.unified_embed:
             if x_mark is None:
                 x_mark = torch.zeros(
                     x.shape[0],
@@ -317,10 +337,10 @@ class DataEmbedding(nn.Module):
                 )
             else:
                 if x_mark.shape[1] != x.shape[1]:
-                    raise ValueError(f"wv 统一模式要求 x 与 x_mark 的序列长度一致，但得到 {x.shape[1]} vs {x_mark.shape[1]}")
+                    raise ValueError(f"统一输入层模式要求 x 与 x_mark 的序列长度一致，但得到 {x.shape[1]} vs {x_mark.shape[1]}")
                 if x_mark.shape[-1] != int(self.time_feat_dim or 0):
                     raise ValueError(
-                        f"wv 统一模式要求 x_mark 最后一维为 time_feat_dim={self.time_feat_dim}，但得到 {x_mark.shape[-1]}"
+                        f"统一输入层模式要求 x_mark 最后一维为 time_feat_dim={self.time_feat_dim}，但得到 {x_mark.shape[-1]}"
                     )
                 if x_mark.dtype != x.dtype:
                     x_mark = x_mark.to(dtype=x.dtype)
@@ -358,23 +378,32 @@ class DataEmbedding_wo_pos(nn.Module):
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1, wv_cfg=None):
         super(DataEmbedding_wo_pos, self).__init__()
 
-        self.wv_unified = is_wv_unified(embed_type)
+        self.unified_embed = is_unified_embed(embed_type)
 
         time_embed_type, value_embed_type = parse_embed_arg(embed_type)
 
-        if self.wv_unified:
+        if self.unified_embed:
             self.time_feat_dim = int(time_features_dim(freq))
-            self.value_embedding = WVLiftEmbedding(
-                c_in=c_in + self.time_feat_dim,
-                d_model=d_model,
-                dropout=dropout,
-                wv_cfg=wv_cfg,
-            )
+            if value_embed_type == 'wv':
+                self.value_embedding = WVLiftEmbedding(
+                    c_in=c_in + self.time_feat_dim,
+                    d_model=d_model,
+                    dropout=dropout,
+                    wv_cfg=wv_cfg,
+                )
+            elif value_embed_type == 'linear':
+                self.value_embedding = LinearValueEmbedding(c_in=c_in + self.time_feat_dim, d_model=d_model)
+            else:
+                raise ValueError(f"统一输入层模式仅支持 value_embed_type in {{'wv', 'linear'}}，但得到 {value_embed_type!r}")
             self.temporal_embedding = None
         else:
             self.time_feat_dim = None
-            self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout, wv_cfg=wv_cfg) \
-                if value_embed_type == 'wv' else TokenEmbedding(c_in=c_in, d_model=d_model)
+            if value_embed_type == 'wv':
+                self.value_embedding = WVLiftEmbedding(c_in=c_in, d_model=d_model, dropout=dropout, wv_cfg=wv_cfg)
+            elif value_embed_type == 'linear':
+                self.value_embedding = LinearValueEmbedding(c_in=c_in, d_model=d_model)
+            else:
+                self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
             self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=time_embed_type,
                                                         freq=freq) if time_embed_type != 'timeF' else TimeFeatureEmbedding(
                 d_model=d_model, embed_type=time_embed_type, freq=freq)
@@ -383,7 +412,7 @@ class DataEmbedding_wo_pos(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, x_mark):
-        if self.wv_unified:
+        if self.unified_embed:
             if x_mark is None:
                 x_mark = torch.zeros(
                     x.shape[0],
@@ -394,10 +423,10 @@ class DataEmbedding_wo_pos(nn.Module):
                 )
             else:
                 if x_mark.shape[1] != x.shape[1]:
-                    raise ValueError(f"wv 统一模式要求 x 与 x_mark 的序列长度一致，但得到 {x.shape[1]} vs {x_mark.shape[1]}")
+                    raise ValueError(f"统一输入层模式要求 x 与 x_mark 的序列长度一致，但得到 {x.shape[1]} vs {x_mark.shape[1]}")
                 if x_mark.shape[-1] != int(self.time_feat_dim or 0):
                     raise ValueError(
-                        f"wv 统一模式要求 x_mark 最后一维为 time_feat_dim={self.time_feat_dim}，但得到 {x_mark.shape[-1]}"
+                        f"统一输入层模式要求 x_mark 最后一维为 time_feat_dim={self.time_feat_dim}，但得到 {x_mark.shape[-1]}"
                     )
                 if x_mark.dtype != x.dtype:
                     x_mark = x_mark.to(dtype=x.dtype)

@@ -74,7 +74,7 @@ if __name__ == '__main__':
                         default=True)
     parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
     parser.add_argument('--embed', type=str, default='timeF',
-                        help='time features encoding, options:[timeF, fixed, learned]; WVEmbs: wv（统一时间入通道）/ wv_timeF / wv_fixed / wv_learned（消融）')
+                        help='embedding 模式：原始 TSLib=[timeF, fixed, learned]；线性基线=linear / linear_timeF / linear_fixed / linear_learned；WVEmbs=wv（统一时间入通道）/ wv_timeF / wv_fixed / wv_learned')
     parser.add_argument('--activation', type=str, default='gelu', help='activation')
     parser.add_argument('--channel_independence', type=int, default=1,
                         help='0: channel dependence 1: channel independence for FreTS model')

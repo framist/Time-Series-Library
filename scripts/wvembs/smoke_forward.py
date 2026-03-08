@@ -95,7 +95,7 @@ def main():
         "--embed",
         type=str,
         default="wv",
-        help="embedding 模式：wv（统一时间入通道）或 wv_timeF（消融：时间仍用 TimeFeatureEmbedding）",
+        help="embedding 模式：timeF / linear / linear_timeF / wv / wv_timeF",
     )
     parser.add_argument("--wv_mask_prob", type=float, default=0.0, help="WVEmbs 掩码概率，0 关闭")
     parser.add_argument(

@@ -219,6 +219,21 @@ bash ./scripts/anomaly_detection/PSM/TimesNet.sh
 bash ./scripts/classification/TimesNet.sh
 ```
 
+### WVEmbs No-Preprocess Fair Control
+
+This branch additionally supports input-layer fair control for WVEmbs:
+
+- `--embed linear` / `linear_timeF` / `linear_fixed` / `linear_learned`: linear input-layer baselines
+- `--embed wv` / `wv_timeF` / `wv_fixed` / `wv_learned`: WVEmbs frontends
+
+For the no-preprocess setting (`scale_mode=none`), use:
+
+```bash
+bash scripts/wvembs/no_preprocess_fair_suite.sh
+```
+
+The script fixes the backbone / training protocol / data split and only swaps the input layer among `timeF`, `linear`, and `wv`.
+
 ### Develop Your Own Model
 - Add the model file to the folder `./models`. You can follow the `./models/Transformer.py`.
 - Create the corresponding scripts under the folder `./scripts`.

@@ -1,6 +1,6 @@
 # WVEmbs 在 TSLib 的实现速查
 
-> 更新时间：2026-03-06
+> 更新时间：2026-03-09
 
 ## 方法概览
 
@@ -14,6 +14,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 | `--embed` | 含义 |
 |---|---|
 | `timeF` / `fixed` / `learned` | 原始 TSLib 行为 |
+| `linear` / `linear_timeF` / `linear_fixed` / `linear_learned` | 线性输入层基线；其中 `linear` 为统一模式，把值与 `timeF` 时间特征拼接后做线性投影 |
 | `wv_timeF` / `wv_fixed` / `wv_learned` | 值走 WVEmbs，时间特征仍走原始时间嵌入 |
 | `wv` | 统一模式；把值与 `timeF` 时间特征拼接后一起送入 WVEmbs |
 
@@ -42,6 +43,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 
 - 阶段 0（embed 对照）：不加 `--inverse`，指标在缩放空间。
 - 阶段 1（`scale_mode` 对照）：统一加 `--inverse`，比较原始物理量尺度上的指标。
+- 无预处理公平对照：统一使用 `scale_mode=none`，优先比较 `timeF / linear / wv` 三种输入层；`linear` 用来更严格地回答“只替换输入层后，WVEmbs 是否仍有优势”。
 - `prior_scale` 默认按 `max(|x_train|) × 2` 初始化。
 - `scale_mode=none` 只是对照项，不是稳健默认项。
 
@@ -97,6 +99,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 
 ### 主实验
 
+- `scripts/wvembs/no_preprocess_fair_suite.sh`
 - `scripts/wvembs/forecast_cycle6_table1.sh`
 - `scripts/wvembs/forecast_cycle6_tuning.sh`
 - `scripts/wvembs/run_final_suite.sh`
@@ -120,7 +123,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 
 ## 已知限制
 
-- Forecast 之外的三类任务暂无稳定正收益，不建议继续扩展实验预算。
+- 常规预处理口径下，Forecast 之外的三类任务暂无稳定正收益；但“无预处理公平对照”仍在补跑，相关结论未最终锁定。
 - Electricity 对 `prior_scale` 极敏感，且成本高；目前不纳入主表。
 - `exp/exp_long_term_forecasting.py` 中阈值估计顺序问题仍需修复后重跑受影响结果。
 - HSPMF 若继续推进，应优先尝试“推理期解码”，不要继续把输出层补丁当作主线。

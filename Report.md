@@ -1,6 +1,6 @@
 # WVEmbs 实验报告（TSLib / PG 分支）
 
-> 更新时间：2026-03-06
+> 更新时间：2026-03-09
 
 ## 结论摘要
 
@@ -9,7 +9,7 @@
 - 数据集存在两类响应模式：
   - ETTh1 / ETTm1 / Weather：`standard + jss(0.25)` 稳定改善。
   - ETTh2 / ETTm2：短期可改善，但长预测上 JSS 共享采样会失效，ISS 或 `extrap` 更鲁棒。
-- Imputation / Anomaly / Classification 暂无稳定收益，不再扩展。
+- 常规预处理口径下，Imputation / Anomaly / Classification 暂无稳定收益；无预处理公平对照仍待补齐后再定稿。
 - TimeMixer 上 RevIN-only 最优，说明 RevIN 与 WVEmbs 存在明显功能重叠。
 - HSPMF 当前“输出层增强”版本显著差于纯 WVEmbs，仅保留为实验分支。
 
@@ -24,6 +24,7 @@
 
 - 阶段 0（embed 对照）：不加 `--inverse`，指标在缩放空间。
 - 阶段 1（`scale_mode` 对照与主表）：统一加 `--inverse`，比较原始物理量尺度。
+- 无预处理公平对照：统一用 `scale_mode=none`，当前实现已支持 `embed=timeF / linear / wv` 三组输入层对照。
 - `prior_scale` 默认按 `max(|x_train|) × 2` 初始化。
 - 主表三组配置：
 
@@ -110,6 +111,11 @@
 | Anomaly | PSM F-score：`0.9741 -> 0.9736 / 0.9658` | 差异极小或略差 |
 | Classification | Heartbeat Accuracy：`0.8098 -> 0.7659 / 0.7561` | 明显退化 |
 
+补充说明：
+
+- 上表仍是“常规预处理口径”的结果，不覆盖当前高优先的“无预处理公平对照”。
+- `scripts/wvembs/no_preprocess_fair_suite.sh` 与 `embed=linear` 已就位，并通过小预算链路验证；完整预算结果未回填前，不把这些快速数值写入正式主表。
+
 ### Electricity 备注
 
 - 当前预算下，`standard + timeF` 仍最好：`91208.65 / 224.12`。
@@ -168,6 +174,7 @@
 
 保留的关键产物：
 
+- 无预处理公平对照：`scripts/wvembs/no_preprocess_fair_suite.sh`
 - 主实验脚本：`scripts/wvembs/forecast_cycle6_table1.sh`
 - 退化调参：`scripts/wvembs/forecast_cycle6_tuning.sh`
 - RevIN 消融：`scripts/wvembs/forecast_timemixer_revin_ablation.sh`
@@ -176,4 +183,5 @@
 
 当前待完成事项：
 
+- 按 `scripts/wvembs/no_preprocess_fair_suite.sh` 完整重跑 ETTh1 / ETTh2 / Weather 的 Forecast 公平对照，并补 Imputation / Anomaly / Classification 的无预处理结果。
 - 若继续 HSPMF，先完成已有调参；无收益则切换到“推理期解码”路线。
