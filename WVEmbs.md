@@ -103,6 +103,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 - 无预处理公平对照：`scripts/wvembs/no_preprocess_fair_suite.sh`
   - 仅补跑 WVEmbs 宽松参数时，可用：`FAIR_EMBEDS="wv" WV_EXTRAP_MODE=scale WV_EXTRAP_SCALE=5.0 bash scripts/wvembs/no_preprocess_fair_suite.sh`
 - 无预处理结果汇总：`scripts/wvembs/summarize_no_preprocess_results.py`
+- 逐预测步误差曲线导出：`scripts/wvembs/export_horizon_error_curves.py`
 - Forecast 主表生成：`scripts/wvembs/forecast_cycle6_table1.sh`
 - Forecast 退化点修复扫描：`scripts/wvembs/forecast_cycle6_tuning.sh`
 - 当前完整实验套件入口：`scripts/wvembs/run_final_suite.sh`
@@ -119,6 +120,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 ### 可视化
 
 - 退化修复相关作图：`scripts/wvembs/plot_cycle4.py`、`scripts/wvembs/plot_cycle5.py`
+- 逐预测步误差曲线：`scripts/wvembs/export_horizon_error_curves.py`
 - 论文版式示意图：`scripts/wvembs/visualize_paper_samples.py`
 
 ## 已知限制

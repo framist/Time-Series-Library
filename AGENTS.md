@@ -72,6 +72,7 @@ plt.rcParams.update(font_config)
 - 可视化：
   - `scripts/wvembs/visualize_paper_samples.py`
   - `scripts/wvembs/visualize_predictions.py`
+  - `scripts/wvembs/export_horizon_error_curves.py`
   - `results/paper_visualizations/`
 
 ## 实验口径
