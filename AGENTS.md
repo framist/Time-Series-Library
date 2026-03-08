@@ -38,9 +38,12 @@ plt.rcParams.update(font_config)
   - 补一组“无预处理公平对照”实验：固定同一 backbone、同一训练协议与同一数据划分，仅替换输入层为“原始/线性嵌入”与 `WVEmbs`，并统一关闭数据预处理（至少关闭 `standard/prior` 与 RevIN 一类依赖统计量的变换）。优先在 Forecast 主线的 `Transformer` 上覆盖 ETTh1 / ETTh2 / Weather，目标是回答“双方都不做预处理时，WVEmbs 是否仍具备更好的可训练性、泛化性与性能增益”。若 `none + timeF/linear` 出现 NaN、发散或明显不稳，不视为无效结果，而应作为“WVEmbs 更适合无预处理部署”的证据单独记录。
     - 也要包括无预处理场景下 Imputation / Anomaly / Classification 的实验结果。
     - 为了体现无预处理场景的实际意义，WVEmbs 要求的预处理（对数据集线性变换）可以改为设置宽松的 WVEmbs 内部参数
-    - 当前实现进度：已补 `embed=linear` / `linear_timeF` 这类线性输入层基线，并新增 `scripts/wvembs/no_preprocess_fair_suite.sh` 统一入口；已完成小预算链路验证，下一步是完整预算重跑并回填 `Report.md`
+    - 当前实现进度：已补 `embed=linear` / `linear_timeF` 这类线性输入层基线，并新增 `scripts/wvembs/no_preprocess_fair_suite.sh` 统一入口；已完成小预算链路验证。
+    - 截至 `2026-03-09 07:08 CST`：`NoPrepFairFull_20260309` 仍在运行，已完成 `35/45` 组结果。Forecast 中 `ETTh1 / ETTh2` 已跑完，`Weather` 已完成 `pred_len=96/192/336` 和 `pred_len=720` 的 `raw_timeF / linear`，当前正在跑 `Weather / WVEmbs / pred_len=720`。当前最稳定的结论是：`ETTh2` 四个 horizon 上 `raw_timeF` 全部 NaN，而 `WVEmbs` 相对 `linear` 分别为 `-17.5% / -15.0% / -8.5% / -3.2%`；`Weather` 的 `96/192/336/720` 上 `raw_timeF` 与 `linear` 均已出现 NaN，而 `WVEmbs` 在 `96/192/336` 上仍给出有限值。
+    - 截至 `2026-03-09 07:08 CST`：Imputation / Anomaly / Classification 的无预处理结果尚未启动，因为完整 Forecast 公平对照还没跑完。
   - HSPMF 检查现有实现是否正确合理，特别目前缺少了 End2End-NLL 的训练方法，可以参考 ../HSPMF 中的实验方法和一些已有结果；注意需要用分布拟合相关指标来体现 HSPMF 的优势点；另外也尝试验证“纯 WVEmbs backbone + 推理期 HSPMF 解码”路线。
-    - 当前实现进度：已把“正频率谱头 + 共轭对称重建 + `hspmf_loss=nll` + test 侧 `nll/crps` 指标落盘”接入 Forecast 主线；下一步是 ETTh1 完整预算比较 `point-MSE / End2End-NLL / 推理期解码`
+    - 当前实现进度：已把“正频率谱头 + 共轭对称重建 + `hspmf_loss=nll` + test 侧 `nll/crps` 指标落盘”接入 Forecast 主线，并给 `scripts/wvembs/forecast_etth1_hspmf.sh` 加了 `RUN_BASELINE / RUN_MSE / RUN_NLL` 开关。
+    - 截至 `2026-03-09 07:08 CST`：HSPMF 队列仍处于等待状态，尚未开始实际训练；原因是高优先的 `NoPrepFairFull_20260309` 还没结束。
   - 类如 cycle 这些实验名在交付论文的图表，不要有这些内部名、脚本与代码名，而是用自然语言描述。族群 A、族群 B 也需要加以说明
 - 中优先：
   - 围绕 ETTh2 / ETTm2 的长预测退化继续做“修复型”扫描，优先级顺序是：`wv_sampling` 切换、`wv_extrap_scale`、`jss_std`、必要时再看 `prior_scale`。目标不是再找一个全局默认，而是给出“族群 B 为何需要备选配置”的更强证据。
