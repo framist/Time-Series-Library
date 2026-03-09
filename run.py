@@ -134,6 +134,13 @@ if __name__ == '__main__':
                         help='HSPMF 分数模式：real=实部，abs2=模平方（默认abs2对齐论文）')
     parser.add_argument('--hspmf_hier_levels', type=int, nargs='+', default=None,
                         help='HSPMF 分层级数，如 4 16。末项必须等于 n_fourier，None 则自动选择')
+    parser.add_argument('--hspmf_infer_decode', action='store_true', default=False,
+                        help='仅在测试阶段启用：对普通点预测结果做 HSPMF 推理期解码，并评估 nll/crps')
+    parser.add_argument('--hspmf_infer_beta', type=float, default=None,
+                        help='推理期 HSPMF 解码的固定 beta；为空时在验证集上从 beta 网格中选最优')
+    parser.add_argument('--hspmf_infer_beta_values', type=float, nargs='+',
+                        default=[0.25, 0.5, 1.0, 2.0, 4.0, 8.0],
+                        help='推理期 HSPMF 解码的 beta 候选网格（仅在未显式给定 --hspmf_infer_beta 时使用）')
 
     # optimization
     # optimization
@@ -150,6 +157,8 @@ if __name__ == '__main__':
     parser.add_argument('--patience', type=int, default=3, help='early stopping patience')
     parser.add_argument('--learning_rate', type=float, default=0.0001, help='optimizer learning rate')
     parser.add_argument('--des', type=str, default='test', help='exp description')
+    parser.add_argument('--load_setting', type=str, default='',
+                        help='is_training=0 时可指定要加载的已有 setting 名称；为空则默认加载当前 setting')
     parser.add_argument('--loss', type=str, default='MSE', help='loss function')
     parser.add_argument('--lradj', type=str, default='type1', help='adjust learning rate')
     parser.add_argument('--use_amp', action='store_true', help='use automatic mixed precision training', default=False)

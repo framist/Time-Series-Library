@@ -11,7 +11,7 @@
   - ETTh2 / ETTm2：短期可改善，但长预测上 JSS 共享采样会失效，ISS 或 `extrap` 更鲁棒。
 - 常规预处理口径下，Imputation / Anomaly / Classification 暂无稳定收益；无预处理公平对照补齐后也依然只有 Forecast 显示出稳定部署优势。
 - TimeMixer 上 RevIN-only 最优，说明 RevIN 与 WVEmbs 存在明显功能重叠。
-- HSPMF 当前“输出层增强”版本显著差于纯 WVEmbs，仅保留为实验分支。
+- HSPMF 的输出头训练分支显著差于纯 WVEmbs；若需要分布预测，应优先使用“纯 WVEmbs backbone + 推理期 HSPMF 解码”。
 
 ## 运行环境与口径
 
@@ -115,6 +115,7 @@
 
 - 上表仍是“常规预处理口径”的结果；无预处理公平对照的最终结论另行记录如下。
 - `NoPrepFairFull_20260309` 已完整跑完。Forecast 中，`ETTh2` 四个 horizon 上 `raw_timeF` 全部 NaN，而 `WVEmbs` 相对 `linear` 的 MSE 为 `-17.5% / -15.0% / -8.5% / -3.2%`；`Weather` 上 `raw_timeF` 与 `linear` 四个 horizon 全部 NaN，而 `WVEmbs` 四组都给出有限值。`ETTh1` 则由 `linear` 全面优于当前 `wv(iss/direct)`。
+- ETTh1 的 follow-up `NoPrepFairWVScale5_ETTh1_20260309` 说明：把无预处理 WVEmbs 改成 `wv_extrap_mode=scale, wv_extrap_scale=5.0` 后，`pred_len=96/192` 可反超 `linear`（MSE `-18.8% / -11.5%`），并相对原始 `wv(iss/direct)` 再降 `30.6% / 33.8% / 23.8% / 7.5%`；但 `336/720` 仍落后于 `linear`（`+33.8% / +16.8%`）。因此 ETTh1 的无预处理结论应写成“scale=5.0 是有效修复旋钮，但还不是完整解”。
 - 同一无预处理口径下，Imputation（ETTh1）上 `WVEmbs` 有轻微 MSE 优势（`1.0428/1.0581 -> 1.0085`），但 MAE 更差；Anomaly（PSM）与 Classification（Heartbeat）仍由 `raw_timeF` 最优。因此“无预处理更适合部署”的证据目前主要来自 Forecast，而不是其余三类任务。
 
 ### Electricity 备注
@@ -166,12 +167,14 @@
 | Transformer + WVEmbs | **13.91** | **2.34** | 无 | baseline |
 | Transformer_HSPMF + HSPMF-MSE | 30.08 | 3.35 | `nll=12.09, crps=1.2147, beta=1.0` | +116% |
 | Transformer_HSPMF + End2End-NLL | 34.37 | 3.49 | `nll=4.6106, crps=1.1022, beta=0.9745` | +147% |
+| Transformer + WVEmbs + 推理期 HSPMF 解码 | 13.91 | 2.34 | `nll=4.1597, crps=1.1085, beta=0.003906` | +0.02% |
 
 结论：
 
 - 纯 `Transformer + WVEmbs` 重新稳定回到 `13.91 / 2.34`，说明当前对照基线可信。
-- End2End-NLL 相比 HSPMF-MSE 明确改善了分布指标，但点预测继续退化，因此当前仍不进入默认实验套件。
-- 若继续 HSPMF，应优先切到“推理期解码”路线，而不是继续把输出层补丁当作主线。
+- End2End-NLL 相比 HSPMF-MSE 明确改善了分布指标，但点预测继续退化，因此当前仍不应把 HSPMF 输出头放进默认实验套件。
+- “推理期 HSPMF 解码”在几乎不改变点预测的前提下，把 NLL 做到 `4.1597`，比 End2End-NLL 输出头再降约 `9.8%`；CRPS 为 `1.1085`，只比 End2End-NLL 高约 `0.6%`，但显著好于 HSPMF-MSE 头。
+- 若继续 HSPMF，应优先扩大“纯 WVEmbs backbone + 推理期解码”的验证覆盖，而不是继续增加输出头训练预算。
 
 ## 产物与后续
 
@@ -188,5 +191,5 @@
 
 当前待完成事项：
 
-- 若继续无预处理 follow-up，优先补 ETTh1 的 `wv_extrap_scale=5.0` 修复点，评估它是否能把 ETTh1 的 `none + wv` 拉回到至少不弱于 `linear`。
-- HSPMF 后续优先切到“纯 WVEmbs backbone + 推理期 HSPMF 解码”路线，而不是继续增加输出头训练预算。
+- 若继续无预处理 follow-up，优先盯 ETTh1 的 `pred_len=336/720`，继续判断 `wv_extrap_scale` 是否还可再调，或是否需要配合 `jss_std / sampling` 一起修。
+- HSPMF 后续优先把“纯 WVEmbs backbone + 推理期 HSPMF 解码”扩到更多数据集或 horizon，而不是继续增加输出头训练预算。

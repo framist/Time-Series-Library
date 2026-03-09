@@ -29,7 +29,8 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 | `--wv_base` | 对数频率基底 |
 | `--wv_mask_prob` / `--wv_mask_type` / `--wv_mask_dlow_min` | 训练期掩码增强 |
 | `--wv_extrap_mode direct|scale` / `--wv_extrap_scale` | 值域外推与相位缩放 |
-| `--use_hspmf` / `--hspmf_loss mse|nll` / `--hspmf_learn_beta` 及其余 `--hspmf_*` | HSPMF 实验开关、训练目标与 beta 学习方式 |
+| `--use_hspmf` / `--hspmf_loss mse|nll` / `--hspmf_learn_beta` 及其余 `--hspmf_*` | HSPMF 输出头训练分支的开关、训练目标与 beta 学习方式 |
+| `--hspmf_infer_decode` / `--hspmf_infer_beta` / `--hspmf_infer_beta_values` / `--load_setting` | 对已有点预测 checkpoint 做推理期 HSPMF 解码，并在验证集上选 beta |
 
 ### 关键代码位置
 
@@ -76,9 +77,10 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 
 - 掩码增强中 `phase_rotate` 在 ETTh1 上最佳，但跨数据集不稳，不进入默认配置。
 - `wv_extrap_scale` 本质是数值稳定性旋钮，不应表述为“自动获得 OOD 鲁棒性”。
+- ETTh1 的无预处理 follow-up 已验证：`wv_extrap_scale=5.0` 相比原始 `wv(iss/direct)` 可把四个 horizon 的 MSE 再压低 `30.6% / 33.8% / 23.8% / 7.5%`，并在 `pred_len=96/192` 上反超 `linear`；但 `336/720` 仍未完全修复。
 - TimeMixer 上 RevIN-only 最优，说明 WVEmbs 与强归一化机制有功能重叠。
-- HSPMF 当前实验分支已支持“正频率谱头 + 共轭对称重建 + End2End-NLL”；测试阶段会额外写出 `results/.../hspmf_dist_metrics.json`，记录 `nll / crps / beta`。
-- `HSPMF_Validation_20260309` 的 ETTh1 完整重跑结果是：纯 `Transformer + WVEmbs` 为 `13.91 / 2.34`，`Transformer_HSPMF + mse` 为 `30.08 / 3.35`，`Transformer_HSPMF + End2End-NLL` 为 `34.37 / 3.49`；不过 End2End-NLL 的分布指标优于 MSE 头（`nll/crps: 12.09/1.2147 -> 4.6106/1.1022`）。当前结论仍是“不进默认套件，但可保留作分布预测分支”。
+- HSPMF 当前实验分支已支持“正频率谱头 + 共轭对称重建 + End2End-NLL”，以及“纯 WVEmbs backbone + 推理期 HSPMF 解码”；测试阶段会额外写出 `results/.../hspmf_dist_metrics.json`，记录 `nll / crps / beta`。
+- `HSPMF_Validation_20260309` 与 `HSPMF_InferDecodeGrid2_20260309` 的 ETTh1 对照结果是：纯 `Transformer + WVEmbs` 为 `13.91 / 2.34`，`Transformer_HSPMF + mse` 为 `30.08 / 3.35`，`Transformer_HSPMF + End2End-NLL` 为 `34.37 / 3.49`，而“推理期解码”可把点预测基本保持在 `13.91 / 2.34`，同时得到 `nll=4.1597 / crps=1.1085`。当前结论是：输出头不进默认套件，但推理期解码可保留作分布预测主线。
 
 ## 兼容性矩阵
 
@@ -104,6 +106,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
   - 仅补跑 WVEmbs 宽松参数时，可用：`FAIR_EMBEDS="wv" WV_EXTRAP_MODE=scale WV_EXTRAP_SCALE=5.0 bash scripts/wvembs/no_preprocess_fair_suite.sh`
 - 无预处理结果汇总：`scripts/wvembs/summarize_no_preprocess_results.py`
   - 当前会同时输出 `vs_raw_timeF` 与 `vs_linear`，方便在 `raw_timeF` 发散时直接比较 `linear` 与 `WVEmbs`
+  - 若只补跑了部分 variant，可用 `--reference-des` 把历史 `raw_timeF/linear` 基线并入本次汇总
 - 逐预测步误差曲线导出：`scripts/wvembs/export_horizon_error_curves.py`
 - Forecast 主表生成：`scripts/wvembs/forecast_cycle6_table1.sh`
 - Forecast 退化点修复扫描：`scripts/wvembs/forecast_cycle6_tuning.sh`
@@ -118,7 +121,9 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 - 交叉验证：`scripts/wvembs/forecast_cycle5_crossval.sh`
 - RevIN 功能重叠消融：`scripts/wvembs/forecast_timemixer_revin_ablation.sh`
 - HSPMF 验证：`scripts/wvembs/forecast_etth1_hspmf.sh`
-  - 可用 `RUN_BASELINE=0/1`、`RUN_MSE=0/1`、`RUN_NLL=0/1` 控制是否执行对应分支，预算紧张时可先保留 baseline 与 NLL
+  - 当前单入口覆盖 plain baseline、HSPMF-MSE、End2End-NLL 与推理期解码四个分支
+  - 可用 `RUN_BASELINE=0/1`、`RUN_MSE=0/1`、`RUN_NLL=0/1`、`RUN_INFER_DECODE=0/1` 控制是否执行对应分支
+  - 仅做推理期解码时，可通过 `BASELINE_DES` 或 `BASELINE_LOAD_SETTING` 复用已有 baseline checkpoint
 
 ### 可视化
 
@@ -128,7 +133,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 
 ## 已知限制
 
-- 常规预处理口径下，Forecast 之外的三类任务暂无稳定正收益；但“无预处理公平对照”仍在补跑，相关结论未最终锁定。
+- 常规预处理与无预处理两种口径下，Forecast 之外的三类任务都暂无稳定正收益。
 - Electricity 对 `prior_scale` 极敏感，且成本高；目前不纳入主表。
 - `exp/exp_long_term_forecasting.py` 中阈值估计顺序问题仍需修复后重跑受影响结果。
-- HSPMF 若继续推进，应优先尝试“推理期解码”，不要继续把输出层补丁当作主线。
+- HSPMF 若继续推进，应优先扩大“推理期解码”的验证覆盖，而不是继续把输出层补丁当作主线。

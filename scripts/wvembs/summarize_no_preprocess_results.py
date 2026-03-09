@@ -218,15 +218,50 @@ def attach_delta(
             )
 
 
+def merge_rows(
+    primary_rows: List[Dict[str, str]],
+    reference_rows: List[Dict[str, str]],
+    key_fields: Sequence[str],
+    group_fields: Sequence[str] | None = None,
+) -> List[Dict[str, str]]:
+    merged: Dict[tuple, Dict[str, str]] = {}
+    primary_groups = None
+    if group_fields is not None:
+        primary_groups = {tuple(row[field] for field in group_fields) for row in primary_rows}
+    for row in reference_rows:
+        if primary_groups is not None:
+            group_key = tuple(row[field] for field in group_fields)
+            if group_key not in primary_groups:
+                continue
+        key = tuple(row[field] for field in key_fields)
+        merged[key] = dict(row)
+    for row in primary_rows:
+        key = tuple(row[field] for field in key_fields)
+        merged[key] = dict(row)
+    return list(merged.values())
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="汇总无预处理公平对照结果")
     parser.add_argument("--des", required=True, help="实验描述字段，如 NoPrepFairFull_20260309")
+    parser.add_argument(
+        "--reference-des",
+        default="",
+        help="可选参考实验描述字段；当当前 DES 只补跑部分 variant 时，可从参考结果中补齐 raw_timeF/linear 等基线",
+    )
     parser.add_argument("--out", type=str, default="", help="可选输出 Markdown 文件")
     args = parser.parse_args()
 
     sections = []
 
     forecast_rows = collect_forecast(args.des)
+    if args.reference_des:
+        forecast_rows = merge_rows(
+            forecast_rows,
+            collect_forecast(args.reference_des),
+            ("dataset", "pred_len", "variant"),
+            group_fields=("dataset", "pred_len"),
+        )
     if forecast_rows:
         forecast_rows.sort(key=lambda x: (x["dataset"], int(x["pred_len"]), _variant_rank(x["variant"])))
         attach_delta(forecast_rows, ["dataset", "pred_len"], "mse", "vs_raw_timeF")
@@ -240,6 +275,13 @@ def main() -> None:
         )
 
     imputation_rows = collect_imputation(args.des)
+    if args.reference_des:
+        imputation_rows = merge_rows(
+            imputation_rows,
+            collect_imputation(args.reference_des),
+            ("dataset", "variant"),
+            group_fields=("dataset",),
+        )
     if imputation_rows:
         imputation_rows.sort(key=lambda x: (x["dataset"], _variant_rank(x["variant"])))
         attach_delta(imputation_rows, ["dataset"], "mse", "vs_raw_timeF")
@@ -250,6 +292,13 @@ def main() -> None:
         )
 
     anomaly_rows = collect_anomaly(args.des)
+    if args.reference_des:
+        anomaly_rows = merge_rows(
+            anomaly_rows,
+            collect_anomaly(args.reference_des),
+            ("dataset", "variant"),
+            group_fields=("dataset",),
+        )
     if anomaly_rows:
         anomaly_rows.sort(key=lambda x: (x["dataset"], _variant_rank(x["variant"])))
         attach_delta(anomaly_rows, ["dataset"], "f1", "vs_raw_timeF", lower_is_better=False)
@@ -270,6 +319,13 @@ def main() -> None:
         )
 
     classification_rows = collect_classification(args.des)
+    if args.reference_des:
+        classification_rows = merge_rows(
+            classification_rows,
+            collect_classification(args.reference_des),
+            ("dataset", "variant"),
+            group_fields=("dataset",),
+        )
     if classification_rows:
         classification_rows.sort(key=lambda x: (x["dataset"], _variant_rank(x["variant"])))
         attach_delta(classification_rows, ["dataset"], "accuracy", "vs_raw_timeF", lower_is_better=False)

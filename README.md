@@ -240,6 +240,15 @@ FAIR_EMBEDS="wv" WV_EXTRAP_MODE=scale WV_EXTRAP_SCALE=5.0 \
   bash scripts/wvembs/no_preprocess_fair_suite.sh
 ```
 
+When only a follow-up WVEmbs branch is rerun and the `raw/linear` baselines come from an earlier `DES`, summarize them together with:
+
+```bash
+conda run -n radio python scripts/wvembs/summarize_no_preprocess_results.py \
+  --des NoPrepFairWVScale5_ETTh1_20260309 \
+  --reference-des NoPrepFairFull_20260309 \
+  --out logs/no_preprocess_wvscale5_etth1_20260309.md
+```
+
 ### WVEmbs Experiment Mapping
 
 For the WVEmbs experiments in this branch, the delivery-facing descriptions and the corresponding repo entry points are:
@@ -257,8 +266,8 @@ For the WVEmbs experiments in this branch, the delivery-facing descriptions and 
   `scripts/wvembs/forecast_timemixer_revin_ablation.sh`
 - HSPMF verification:
   `scripts/wvembs/forecast_etth1_hspmf.sh`
-  This single entry now covers the plain WVEmbs baseline, the HSPMF point-MSE route, and the End2End-NLL route. HSPMF test runs additionally write `hspmf_dist_metrics.json` with `nll / crps / beta`. The current ETTh1 validation result is that End2End-NLL improves `nll / crps` over the HSPMF-MSE head, but both HSPMF heads remain clearly worse than the plain WVEmbs baseline on point forecasting.
-  When the remaining budget is tight, `RUN_BASELINE=0/1`, `RUN_MSE=0/1`, and `RUN_NLL=0/1` can be used to keep only the most important branches.
+  This single entry now covers the plain WVEmbs baseline, the HSPMF point-MSE route, the End2End-NLL route, and the inference-time HSPMF decode route. HSPMF test runs additionally write `hspmf_dist_metrics.json` with `nll / crps / beta`. On ETTh1, the inference-time decode route keeps point metrics essentially unchanged (`13.91 / 2.34 -> 13.91 / 2.34`) while reaching `nll / crps = 4.1597 / 1.1085`, which beats the trained End2End-NLL head on NLL and avoids the point-forecast degradation of both HSPMF output-head branches.
+  When the remaining budget is tight, `RUN_BASELINE=0/1`, `RUN_MSE=0/1`, `RUN_NLL=0/1`, and `RUN_INFER_DECODE=0/1` can be used to keep only the most important branches. For inference-only reuse of an existing baseline checkpoint, set `BASELINE_DES` or `BASELINE_LOAD_SETTING`.
 
 The code-to-method mapping is mainly:
 

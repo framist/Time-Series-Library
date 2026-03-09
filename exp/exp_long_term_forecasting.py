@@ -1,6 +1,6 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from layers.HSPMF import crps_from_pmf, nll_loss_from_pmf, targets_to_grid_index
+from layers.HSPMF import HSPMFDecoder, crps_from_pmf, nll_loss_from_pmf, targets_to_grid_index, wvemb_complex
 from utils.tools import EarlyStopping, adjust_learning_rate, visual
 from utils.metrics import metric
 import torch
@@ -72,8 +72,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             return nll_loss_from_pmf(posterior, target_idx)
         return criterion(pred, true)
 
-    def _compute_hspmf_eval_metrics(self, posterior, true):
-        decoder = getattr(self._core_model(), "hspmf_decoder", None)
+    def _compute_hspmf_eval_metrics(self, posterior, true, decoder=None):
+        if decoder is None:
+            decoder = getattr(self._core_model(), "hspmf_decoder", None)
         if decoder is None:
             raise RuntimeError("当前模型未挂载 hspmf_decoder")
         target_idx = targets_to_grid_index(true, decoder.x_grid)
@@ -89,6 +90,91 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         if beta is None:
             return None
         return float(beta.detach().cpu().item())
+
+    def _hspmf_x_range(self):
+        x_range = getattr(self.args, "hspmf_x_range", None)
+        if x_range is None:
+            return -6.0, 6.0
+        return float(x_range[0]), float(x_range[1])
+
+    def _build_infer_hspmf_decoder(self, beta):
+        x_lo, x_hi = self._hspmf_x_range()
+        decoder = HSPMFDecoder(
+            n_fourier=getattr(self.args, "hspmf_n_fourier", 16),
+            period=getattr(self.args, "hspmf_period", 1.0),
+            x_lo=x_lo,
+            x_hi=x_hi,
+            grid_size=getattr(self.args, "hspmf_grid_size", 64),
+            hier_levels=getattr(self.args, "hspmf_hier_levels", None),
+            beta=float(beta),
+            tau=getattr(self.args, "hspmf_tau", 1.0),
+            score_mode=getattr(self.args, "hspmf_score_mode", "abs2"),
+            learn_beta=False,
+        ).to(self.device)
+        decoder.eval()
+        return decoder
+
+    def _decode_point_preds_to_hspmf(self, pred, decoder):
+        y_full = wvemb_complex(pred.float(), decoder.omegas, decoder.x_lo)
+        y_full = y_full.reshape(-1, y_full.shape[-1]).to(torch.complex64)
+        with torch.cuda.amp.autocast(enabled=False):
+            x_hat, posterior = decoder(y_full)
+        x_hat = x_hat.view(*pred.shape)
+        posterior = posterior.view(*pred.shape, -1)
+        return x_hat, posterior
+
+    def _select_infer_hspmf_beta(self, vali_loader):
+        fixed_beta = getattr(self.args, "hspmf_infer_beta", None)
+        if fixed_beta is not None:
+            return float(fixed_beta), "fixed"
+
+        beta_values = [float(v) for v in getattr(self.args, "hspmf_infer_beta_values", [])]
+        if not beta_values:
+            beta_values = [1.0]
+
+        decoder = self._build_infer_hspmf_decoder(beta_values[0])
+        best_beta = beta_values[0]
+        best_nll = float("inf")
+
+        max_val_steps = getattr(self.args, 'max_val_steps', -1)
+        use_amp = bool(getattr(self.args, "use_amp", False) and self.device.type == "cuda")
+        non_blocking = (self.device.type == "cuda")
+
+        self.model.eval()
+        with torch.no_grad():
+            for beta in beta_values:
+                decoder._fixed_beta.fill_(float(beta))
+                nll_sum = 0.0
+                nll_count = 0
+                for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+                    if max_val_steps > 0 and i >= max_val_steps:
+                        break
+                    batch_x = batch_x.float().to(self.device, non_blocking=non_blocking)
+                    batch_y = batch_y.float().to(self.device, non_blocking=non_blocking)
+                    batch_x_mark = batch_x_mark.float().to(self.device, non_blocking=non_blocking)
+                    batch_y_mark = batch_y_mark.float().to(self.device, non_blocking=non_blocking)
+
+                    dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                    dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float()
+
+                    with torch.cuda.amp.autocast(enabled=use_amp):
+                        model_output = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                    outputs, aux = self._split_model_output(model_output)
+                    outputs, batch_y_sliced, _ = self._slice_forecast_tensors(outputs, batch_y, aux)
+                    _, posterior = self._decode_point_preds_to_hspmf(outputs.detach(), decoder)
+                    batch_nll, _, batch_count = self._compute_hspmf_eval_metrics(
+                        posterior, batch_y_sliced, decoder=decoder
+                    )
+                    nll_sum += float(batch_nll.detach().cpu().item()) * batch_count
+                    nll_count += batch_count
+
+                mean_nll = nll_sum / max(1, nll_count)
+                if mean_nll < best_nll:
+                    best_nll = mean_nll
+                    best_beta = float(beta)
+
+        return best_beta, "grid_search"
 
     def vali(self, vali_data, vali_loader, criterion):
         loss_sum = torch.zeros((), device=self.device, dtype=torch.float32)
@@ -219,7 +305,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         test_data, test_loader = self._get_data(flag='test')
         if test:
             print('loading model')
-            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+            load_setting = getattr(self.args, 'load_setting', '') or setting
+            load_path = os.path.join(self.args.checkpoints, load_setting, 'checkpoint.pth')
+            print(f'loading checkpoint from: {load_path}')
+            self.model.load_state_dict(torch.load(load_path))
 
         # ── 外推评估：计算训练集每通道 max(|x|) ──
         extrap_eval = getattr(self.args, 'wv_extrap_eval', False)
@@ -253,6 +342,22 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         hspmf_nll_sum = 0.0
         hspmf_crps_sum = 0.0
         hspmf_metric_count = 0
+        hspmf_metrics_decoder = None
+        hspmf_beta_mode = None
+        hspmf_source = None
+
+        use_infer_hspmf_decode = bool(
+            getattr(self.args, "hspmf_infer_decode", False) and not getattr(self.args, "use_hspmf", False)
+        )
+        infer_hspmf_decoder = None
+        if use_infer_hspmf_decode:
+            _, vali_loader = self._get_data(flag='val')
+            infer_beta, hspmf_beta_mode = self._select_infer_hspmf_beta(vali_loader)
+            infer_hspmf_decoder = self._build_infer_hspmf_decoder(infer_beta)
+            hspmf_metrics_decoder = infer_hspmf_decoder
+            hspmf_source = "infer_decode_from_point_forecast"
+            print(f'[HSPMF-Infer] selected beta={infer_beta:.6f} via {hspmf_beta_mode}')
+
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
                 if max_test_steps > 0 and i >= max_test_steps:
@@ -276,6 +381,16 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 outputs_sliced, batch_y_sliced, posterior = self._slice_forecast_tensors(outputs, batch_y, aux)
                 if posterior is not None:
                     batch_nll, batch_crps, batch_count = self._compute_hspmf_eval_metrics(posterior, batch_y_sliced)
+                    hspmf_nll_sum += float(batch_nll.detach().cpu().item()) * batch_count
+                    hspmf_crps_sum += float(batch_crps.detach().cpu().item()) * batch_count
+                    hspmf_metric_count += batch_count
+                    hspmf_metrics_decoder = getattr(self._core_model(), "hspmf_decoder", None)
+                    hspmf_source = "model_posterior"
+                elif infer_hspmf_decoder is not None:
+                    _, infer_posterior = self._decode_point_preds_to_hspmf(outputs_sliced.detach(), infer_hspmf_decoder)
+                    batch_nll, batch_crps, batch_count = self._compute_hspmf_eval_metrics(
+                        infer_posterior, batch_y_sliced, decoder=infer_hspmf_decoder
+                    )
                     hspmf_nll_sum += float(batch_nll.detach().cpu().item()) * batch_count
                     hspmf_crps_sum += float(batch_crps.detach().cpu().item()) * batch_count
                     hspmf_metric_count += batch_count
@@ -371,25 +486,30 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         if hspmf_metric_count > 0:
             hspmf_nll = hspmf_nll_sum / hspmf_metric_count
             hspmf_crps = hspmf_crps_sum / hspmf_metric_count
-            hspmf_beta = self._current_hspmf_beta()
+            if infer_hspmf_decoder is not None:
+                hspmf_beta = float(infer_hspmf_decoder.beta_value.detach().cpu().item())
+            else:
+                hspmf_beta = self._current_hspmf_beta()
             hspmf_info = f', hspmf_nll:{hspmf_nll}, hspmf_crps:{hspmf_crps}'
             if hspmf_beta is not None:
                 hspmf_info += f', hspmf_beta:{hspmf_beta}'
             print(f'[HSPMF] nll:{hspmf_nll:.6f}, crps:{hspmf_crps:.6f}, beta:{hspmf_beta}')
 
-            decoder = getattr(self._core_model(), "hspmf_decoder", None)
             hspmf_metrics = {
                 "nll": hspmf_nll,
                 "crps": hspmf_crps,
                 "beta": hspmf_beta,
                 "space": "decoder_grid",
+                "source": hspmf_source,
             }
-            if decoder is not None:
+            if hspmf_beta_mode is not None:
+                hspmf_metrics["beta_selection"] = hspmf_beta_mode
+            if hspmf_metrics_decoder is not None:
                 hspmf_metrics.update(
                     {
-                        "x_grid_min": float(decoder.x_grid[0].detach().cpu().item()),
-                        "x_grid_max": float(decoder.x_grid[-1].detach().cpu().item()),
-                        "grid_size": int(decoder.x_grid.numel()),
+                        "x_grid_min": float(hspmf_metrics_decoder.x_grid[0].detach().cpu().item()),
+                        "x_grid_max": float(hspmf_metrics_decoder.x_grid[-1].detach().cpu().item()),
+                        "grid_size": int(hspmf_metrics_decoder.x_grid.numel()),
                     }
                 )
             with open(os.path.join(folder_path, 'hspmf_dist_metrics.json'), 'w', encoding='utf-8') as fh:
