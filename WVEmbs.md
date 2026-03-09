@@ -108,6 +108,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
   - 当前会同时输出 `vs_raw_timeF` 与 `vs_linear`，方便在 `raw_timeF` 发散时直接比较 `linear` 与 `WVEmbs`
   - 若只补跑了部分 variant，可用 `--reference-des` 把历史 `raw_timeF/linear` 基线并入本次汇总
 - 逐预测步误差曲线导出：`scripts/wvembs/export_horizon_error_curves.py`
+  - 同样支持 `--reference-des`，可对 ETTh1 这类“只补跑了 WVEmbs 修复点”的 follow-up 直接导出当前有效曲线
 - Forecast 主表生成：`scripts/wvembs/forecast_cycle6_table1.sh`
 - Forecast 退化点修复扫描：`scripts/wvembs/forecast_cycle6_tuning.sh`
 - 族群 B 高优先修复扫描：`scripts/wvembs/forecast_groupb_priority_scan.sh`

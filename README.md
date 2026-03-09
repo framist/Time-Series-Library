@@ -249,6 +249,8 @@ conda run -n radio python scripts/wvembs/summarize_no_preprocess_results.py \
   --out logs/no_preprocess_wvscale5_etth1_20260309.md
 ```
 
+The same `--reference-des` pattern is also supported by `scripts/wvembs/export_horizon_error_curves.py`, so repaired WVEmbs follow-ups can be plotted against the earlier `raw/linear` baselines without rerunning the full suite.
+
 ### WVEmbs Experiment Mapping
 
 For the WVEmbs experiments in this branch, the delivery-facing descriptions and the corresponding repo entry points are:

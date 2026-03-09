@@ -89,6 +89,27 @@ def collect_runs(des: str) -> List[Dict[str, object]]:
     return rows
 
 
+def merge_runs(
+    primary_rows: List[Dict[str, object]],
+    reference_rows: List[Dict[str, object]],
+) -> List[Dict[str, object]]:
+    merged: Dict[tuple, Dict[str, object]] = {}
+    primary_groups = {
+        (str(row["dataset"]), int(row["pred_len"]))
+        for row in primary_rows
+    }
+    for row in reference_rows:
+        group_key = (str(row["dataset"]), int(row["pred_len"]))
+        if group_key not in primary_groups:
+            continue
+        key = (str(row["dataset"]), int(row["pred_len"]), str(row["variant"]))
+        merged[key] = dict(row)
+    for row in primary_rows:
+        key = (str(row["dataset"]), int(row["pred_len"]), str(row["variant"]))
+        merged[key] = dict(row)
+    return list(merged.values())
+
+
 def compute_step_curve(pred_path: Path, true_path: Path, metric: str) -> np.ndarray:
     preds = np.load(pred_path).astype(np.float64, copy=False)
     trues = np.load(true_path).astype(np.float64, copy=False)
@@ -232,6 +253,11 @@ def build_rows_with_curves(rows: List[Dict[str, object]], metric: str) -> List[D
 def main() -> None:
     parser = argparse.ArgumentParser(description="导出逐预测步误差曲线")
     parser.add_argument("--des", required=True, help="实验 DES，例如 NoPrepFairFull_20260309")
+    parser.add_argument(
+        "--reference-des",
+        default="",
+        help="可选参考实验描述字段；当当前 DES 只补跑部分 variant 时，可从参考结果中补齐 raw_timeF/linear 等曲线",
+    )
     parser.add_argument("--metric", choices=["mse", "mae"], default="mse", help="曲线指标")
     parser.add_argument(
         "--outdir",
@@ -248,7 +274,10 @@ def main() -> None:
 
     setup_fonts()
 
-    rows = build_rows_with_curves(collect_runs(args.des), args.metric)
+    runs = collect_runs(args.des)
+    if args.reference_des:
+        runs = merge_runs(runs, collect_runs(args.reference_des))
+    rows = build_rows_with_curves(runs, args.metric)
     if args.datasets:
         wanted = set(args.datasets)
         rows = [row for row in rows if row["dataset"] in wanted]

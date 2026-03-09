@@ -115,7 +115,7 @@
 
 - 上表仍是“常规预处理口径”的结果；无预处理公平对照的最终结论另行记录如下。
 - `NoPrepFairFull_20260309` 已完整跑完。Forecast 中，`ETTh2` 四个 horizon 上 `raw_timeF` 全部 NaN，而 `WVEmbs` 相对 `linear` 的 MSE 为 `-17.5% / -15.0% / -8.5% / -3.2%`；`Weather` 上 `raw_timeF` 与 `linear` 四个 horizon 全部 NaN，而 `WVEmbs` 四组都给出有限值。`ETTh1` 则由 `linear` 全面优于当前 `wv(iss/direct)`。
-- ETTh1 的 follow-up `NoPrepFairWVScale5_ETTh1_20260309` 说明：把无预处理 WVEmbs 改成 `wv_extrap_mode=scale, wv_extrap_scale=5.0` 后，`pred_len=96/192` 可反超 `linear`（MSE `-18.8% / -11.5%`），并相对原始 `wv(iss/direct)` 再降 `30.6% / 33.8% / 23.8% / 7.5%`；但 `336/720` 仍落后于 `linear`（`+33.8% / +16.8%`）。因此 ETTh1 的无预处理结论应写成“scale=5.0 是有效修复旋钮，但还不是完整解”。
+- ETTh1 的 follow-up `NoPrepFairWVScale5_ETTh1_20260309` 说明：把无预处理 WVEmbs 改成 `wv_extrap_mode=scale, wv_extrap_scale=5.0` 后，`pred_len=96/192` 可反超 `linear`（MSE `-18.8% / -11.5%`），并相对原始 `wv(iss/direct)` 再降 `30.6% / 33.8% / 23.8% / 7.5%`；但 `336/720` 仍落后于 `linear`（`+33.8% / +16.8%`）。逐预测步 MSE 曲线显示，`336/720` 的尾段相对前段增幅已从原始 `wv(iss/direct)` 的 `+21.2% / +61.3%` 明显压低到 `+7.6% / +18.6%`。因此 ETTh1 的无预处理结论应写成“scale=5.0 是有效修复旋钮，但还不是完整解”。
 - 同一无预处理口径下，Imputation（ETTh1）上 `WVEmbs` 有轻微 MSE 优势（`1.0428/1.0581 -> 1.0085`），但 MAE 更差；Anomaly（PSM）与 Classification（Heartbeat）仍由 `raw_timeF` 最优。因此“无预处理更适合部署”的证据目前主要来自 Forecast，而不是其余三类任务。
 
 ### Electricity 备注

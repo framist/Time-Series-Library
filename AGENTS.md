@@ -50,6 +50,7 @@ plt.rcParams.update(font_config)
 - 中优先：
   - 围绕 ETTh2 / ETTm2 的长预测退化继续做“修复型”扫描，优先级顺序是：`wv_sampling` 切换、`wv_extrap_scale`、`jss_std`、必要时再看 `prior_scale`。目标不是再找一个全局默认，而是给出“族群 B 为何需要备选配置”的更强证据。
   - 给主表再补一组真实残差分布或误差随预测步增长曲线，正文目前已有真实样例图，但还缺“误差如何随 horizon 累积”的图。
+    - 当前进展：`scripts/wvembs/export_horizon_error_curves.py` 已支持 `--reference-des`，可把 follow-up 补跑结果与历史 baseline 合并作图。已导出 ETTh1 的 `wv_extrap_scale=5.0` 修复曲线，结果表明 WVEmbs 在 `pred_len=336/720` 上虽然总体 MSE 仍未反超 `linear`，但尾段误差增幅已从原始 `wv(iss/direct)` 的 `+21.2% / +61.3%` 降到 `+7.6% / +18.6%`。
   - 若需要把“JSS 与 `scale_mode` 强交互”写得更实，可补一个小规模网格图，只画 ETTh1 与 ETTh2 两个代表数据集即可，不必再全数据集铺开。
   - Electricity 的大规模补充扫描；该数据集对 `prior_scale` 极敏感，且显存/时间成本高。
 - 低优先：
