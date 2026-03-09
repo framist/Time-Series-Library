@@ -9,7 +9,7 @@
 - 数据集存在两类响应模式：
   - ETTh1 / ETTm1 / Weather：`standard + jss(0.25)` 稳定改善。
   - ETTh2 / ETTm2：短期可改善，但长预测上 JSS 共享采样会失效，ISS 或 `extrap` 更鲁棒。
-- 常规预处理口径下，Imputation / Anomaly / Classification 暂无稳定收益；无预处理公平对照仍待补齐后再定稿。
+- 常规预处理口径下，Imputation / Anomaly / Classification 暂无稳定收益；无预处理公平对照补齐后也依然只有 Forecast 显示出稳定部署优势。
 - TimeMixer 上 RevIN-only 最优，说明 RevIN 与 WVEmbs 存在明显功能重叠。
 - HSPMF 当前“输出层增强”版本显著差于纯 WVEmbs，仅保留为实验分支。
 
@@ -113,8 +113,9 @@
 
 补充说明：
 
-- 上表仍是“常规预处理口径”的结果，不覆盖当前高优先的“无预处理公平对照”。
-- `scripts/wvembs/no_preprocess_fair_suite.sh` 与 `embed=linear` 已就位，并通过小预算链路验证；完整预算结果未回填前，不把这些快速数值写入正式主表。
+- 上表仍是“常规预处理口径”的结果；无预处理公平对照的最终结论另行记录如下。
+- `NoPrepFairFull_20260309` 已完整跑完。Forecast 中，`ETTh2` 四个 horizon 上 `raw_timeF` 全部 NaN，而 `WVEmbs` 相对 `linear` 的 MSE 为 `-17.5% / -15.0% / -8.5% / -3.2%`；`Weather` 上 `raw_timeF` 与 `linear` 四个 horizon 全部 NaN，而 `WVEmbs` 四组都给出有限值。`ETTh1` 则由 `linear` 全面优于当前 `wv(iss/direct)`。
+- 同一无预处理口径下，Imputation（ETTh1）上 `WVEmbs` 有轻微 MSE 优势（`1.0428/1.0581 -> 1.0085`），但 MAE 更差；Anomaly（PSM）与 Classification（Heartbeat）仍由 `raw_timeF` 最优。因此“无预处理更适合部署”的证据目前主要来自 Forecast，而不是其余三类任务。
 
 ### Electricity 备注
 
@@ -160,16 +161,17 @@
 
 ### HSPMF 初步结果（ETTh1）
 
-| 配置 | Test MSE | Test MAE | 相对纯 WVEmbs |
-|---|---:|---:|---:|
-| Transformer + WVEmbs | **13.91** | **2.34** | baseline |
-| Transformer_HSPMF + HSPMF | 27.29 | 3.20 | +96% |
+| 配置 | Test MSE | Test MAE | 额外分布指标 | 相对纯 WVEmbs |
+|---|---:|---:|---|---:|
+| Transformer + WVEmbs | **13.91** | **2.34** | 无 | baseline |
+| Transformer_HSPMF + HSPMF-MSE | 30.08 | 3.35 | `nll=12.09, crps=1.2147, beta=1.0` | +116% |
+| Transformer_HSPMF + End2End-NLL | 34.37 | 3.49 | `nll=4.6106, crps=1.1022, beta=0.9745` | +147% |
 
 结论：
 
-- 上表对应旧版点预测头；它显著退化，因此不进入默认实验套件。
-- 新版 End2End-NLL 与 `nll/crps` 分布指标已接入，但完整预算重跑尚未完成，当前暂不改写主结论。
-- 若新版仍无收益，应优先切到“推理期解码”路线，而不是继续把输出层补丁当作主线。
+- 纯 `Transformer + WVEmbs` 重新稳定回到 `13.91 / 2.34`，说明当前对照基线可信。
+- End2End-NLL 相比 HSPMF-MSE 明确改善了分布指标，但点预测继续退化，因此当前仍不进入默认实验套件。
+- 若继续 HSPMF，应优先切到“推理期解码”路线，而不是继续把输出层补丁当作主线。
 
 ## 产物与后续
 
@@ -186,5 +188,5 @@
 
 当前待完成事项：
 
-- 按 `scripts/wvembs/no_preprocess_fair_suite.sh` 完整重跑 ETTh1 / ETTh2 / Weather 的 Forecast 公平对照，并补 Imputation / Anomaly / Classification 的无预处理结果。
-- 若继续 HSPMF，先完成已有调参；无收益则切换到“推理期解码”路线。
+- 若继续无预处理 follow-up，优先补 ETTh1 的 `wv_extrap_scale=5.0` 修复点，评估它是否能把 ETTh1 的 `none + wv` 拉回到至少不弱于 `linear`。
+- HSPMF 后续优先切到“纯 WVEmbs backbone + 推理期 HSPMF 解码”路线，而不是继续增加输出头训练预算。

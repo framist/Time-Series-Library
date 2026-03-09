@@ -39,11 +39,11 @@ plt.rcParams.update(font_config)
     - 也要包括无预处理场景下 Imputation / Anomaly / Classification 的实验结果。
     - 为了体现无预处理场景的实际意义，WVEmbs 要求的预处理（对数据集线性变换）可以改为设置宽松的 WVEmbs 内部参数
     - 当前实现进度：已补 `embed=linear` / `linear_timeF` 这类线性输入层基线，并新增 `scripts/wvembs/no_preprocess_fair_suite.sh` 统一入口；已完成小预算链路验证。
-    - 截至 `2026-03-09 07:08 CST`：`NoPrepFairFull_20260309` 仍在运行，已完成 `35/45` 组结果。Forecast 中 `ETTh1 / ETTh2` 已跑完，`Weather` 已完成 `pred_len=96/192/336` 和 `pred_len=720` 的 `raw_timeF / linear`，当前正在跑 `Weather / WVEmbs / pred_len=720`。当前最稳定的结论是：`ETTh2` 四个 horizon 上 `raw_timeF` 全部 NaN，而 `WVEmbs` 相对 `linear` 分别为 `-17.5% / -15.0% / -8.5% / -3.2%`；`Weather` 的 `96/192/336/720` 上 `raw_timeF` 与 `linear` 均已出现 NaN，而 `WVEmbs` 在 `96/192/336` 上仍给出有限值。
-    - 截至 `2026-03-09 07:08 CST`：Imputation / Anomaly / Classification 的无预处理结果尚未启动，因为完整 Forecast 公平对照还没跑完。
-  - HSPMF 检查现有实现是否正确合理，特别目前缺少了 End2End-NLL 的训练方法，可以参考 ../HSPMF 中的实验方法和一些已有结果；注意需要用分布拟合相关指标来体现 HSPMF 的优势点；另外也尝试验证“纯 WVEmbs backbone + 推理期 HSPMF 解码”路线。
+    - 截至 `2026-03-09 09:43 CST`：`NoPrepFairFull_20260309` 已完成 `45/45` 组结果。Forecast 中，`ETTh2` 四个 horizon 上 `raw_timeF` 全部 NaN，而 `WVEmbs` 相对 `linear` 的 MSE 分别为 `-17.5% / -15.0% / -8.5% / -3.2%`；`Weather` 的 `96/192/336/720` 上 `raw_timeF` 与 `linear` 全部 NaN，而 `WVEmbs` 四组都给出有限值。`ETTh1` 则是 `linear` 全面优于当前 `wv(iss/direct)`，说明 ETTh1 的无预处理仍需宽松参数修复。
+    - 其余任务中，Imputation（ETTh1）上 `WVEmbs` 取得最佳 MSE `1.0085`，相对 `raw_timeF/linear` 为 `-3.3%/-4.7%`，但 MAE 更差；Anomaly（PSM）与 Classification（Heartbeat）都由 `raw_timeF` 最优，`WVEmbs` 分别退化到 `F1=0.9362` 与 `Acc=0.7463`。因此“无预处理部署优势”目前主要体现在 Forecast 的可训练性与稳定性，而不是其余三类任务。
+  - HSPMF 检查现有实现是否正确合理，并继续尝试“纯 WVEmbs backbone + 推理期 HSPMF 解码”路线；分布拟合相关指标仍应作为它的主要观察点。
     - 当前实现进度：已把“正频率谱头 + 共轭对称重建 + `hspmf_loss=nll` + test 侧 `nll/crps` 指标落盘”接入 Forecast 主线，并给 `scripts/wvembs/forecast_etth1_hspmf.sh` 加了 `RUN_BASELINE / RUN_MSE / RUN_NLL` 开关。
-    - 截至 `2026-03-09 07:08 CST`：HSPMF 队列仍处于等待状态，尚未开始实际训练；原因是高优先的 `NoPrepFairFull_20260309` 还没结束。
+    - 截至 `2026-03-09 09:58 CST`：`HSPMF_Validation_20260309` 已完成三支验证。纯 `Transformer + WVEmbs` 基线恢复到 `13.91 / 2.34`；`Transformer_HSPMF + mse` 为 `30.08 / 3.35`，并给出 `nll=12.09 / crps=1.2147 / beta=1.0`；`Transformer_HSPMF + End2End-NLL` 为 `34.37 / 3.49`，但分布指标改善到 `nll=4.6106 / crps=1.1022 / beta=0.9745`。结论是：End2End-NLL 相比 HSPMF-MSE 确实改善了分布指标，但点预测进一步退化，当前仍不进入默认实验套件。
   - 类如 cycle 这些实验名在交付论文的图表，不要有这些内部名、脚本与代码名，而是用自然语言描述。族群 A、族群 B 也需要加以说明
 - 中优先：
   - 围绕 ETTh2 / ETTm2 的长预测退化继续做“修复型”扫描，优先级顺序是：`wv_sampling` 切换、`wv_extrap_scale`、`jss_std`、必要时再看 `prior_scale`。目标不是再找一个全局默认，而是给出“族群 B 为何需要备选配置”的更强证据。
@@ -72,7 +72,6 @@ plt.rcParams.update(font_config)
   - `scripts/wvembs/forecast_groupb_priority_scan.sh`
   - `scripts/wvembs/forecast_timemixer_revin_ablation.sh`
   - `scripts/wvembs/forecast_etth1_hspmf.sh`
-  - `scripts/wvembs/forecast_hspmf_e2e.py`
 - 可视化：
   - `scripts/wvembs/visualize_paper_samples.py`
   - `scripts/wvembs/visualize_predictions.py`
@@ -134,7 +133,7 @@ plt.rcParams.update(font_config)
 ### RevIN 与 HSPMF
 
 - RevIN 消融结论：TimeMixer 上 `RevIN-only` 最优，`RevIN + WVEmbs` 不优于它。
-- HSPMF 旧版点预测头在 ETTh1 上曾把基线从 `13.91 / 2.34` 退化到 `27.29 / 3.20`，因此未进入默认实验套件；新版 End2End-NLL 与分布指标已接线，但完整预算重跑尚未完成。
+- HSPMF 在 ETTh1 上的完整重跑表明：点预测 `mse` 头仍明显退化（`30.08 / 3.35`），End2End-NLL 虽把 `nll/crps` 从 `12.09/1.2147` 改善到 `4.6106/1.1022`，但点预测进一步退化到 `34.37 / 3.49`；因此当前更值得推进的是“推理期解码”路线，而不是继续把 HSPMF 输出头当主线。
 
 ### 维护约定
 

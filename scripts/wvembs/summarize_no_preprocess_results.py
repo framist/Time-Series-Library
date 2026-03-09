@@ -63,7 +63,10 @@ def _parse_anomaly_block(text: str) -> List[Dict[str, str]]:
         )
         if not m:
             continue
-        s = re.match(r"anomaly_detection_NoPrepFair_(?P<dataset>[^_]+)_[^_]+_(?P<variant>[^_]+)_", setting)
+        s = re.match(
+            r"anomaly_detection_NoPrepFair_(?P<dataset>[^_]+)_[^_]+_(?P<variant>raw_timeF|linear|wv)_",
+            setting,
+        )
         if not s:
             continue
         row = s.groupdict()

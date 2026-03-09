@@ -78,7 +78,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 - `wv_extrap_scale` 本质是数值稳定性旋钮，不应表述为“自动获得 OOD 鲁棒性”。
 - TimeMixer 上 RevIN-only 最优，说明 WVEmbs 与强归一化机制有功能重叠。
 - HSPMF 当前实验分支已支持“正频率谱头 + 共轭对称重建 + End2End-NLL”；测试阶段会额外写出 `results/.../hspmf_dist_metrics.json`，记录 `nll / crps / beta`。
-- 现有已完成的 ETTh1 退化结果主要对应旧版点预测头；新版 End2End-NLL 仍在完整预算重跑中。
+- `HSPMF_Validation_20260309` 的 ETTh1 完整重跑结果是：纯 `Transformer + WVEmbs` 为 `13.91 / 2.34`，`Transformer_HSPMF + mse` 为 `30.08 / 3.35`，`Transformer_HSPMF + End2End-NLL` 为 `34.37 / 3.49`；不过 End2End-NLL 的分布指标优于 MSE 头（`nll/crps: 12.09/1.2147 -> 4.6106/1.1022`）。当前结论仍是“不进默认套件，但可保留作分布预测分支”。
 
 ## 兼容性矩阵
 
@@ -117,7 +117,7 @@ WVEmbs 将连续值视为值域上的 Dirac 测度，在对偶谱上采样其特
 - 掩码与外推消融：`scripts/wvembs/forecast_etth1_cycle5_mask.sh`、`scripts/wvembs/forecast_etth1_cycle5_extrap.sh`
 - 交叉验证：`scripts/wvembs/forecast_cycle5_crossval.sh`
 - RevIN 功能重叠消融：`scripts/wvembs/forecast_timemixer_revin_ablation.sh`
-- HSPMF 验证：`scripts/wvembs/forecast_etth1_hspmf.sh`、`scripts/wvembs/forecast_hspmf_e2e.py`
+- HSPMF 验证：`scripts/wvembs/forecast_etth1_hspmf.sh`
   - 可用 `RUN_BASELINE=0/1`、`RUN_MSE=0/1`、`RUN_NLL=0/1` 控制是否执行对应分支，预算紧张时可先保留 baseline 与 NLL
 
 ### 可视化
